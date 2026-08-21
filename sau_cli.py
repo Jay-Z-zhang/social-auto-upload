@@ -1033,10 +1033,74 @@ def build_parser() -> argparse.ArgumentParser:
     baijiahao_upload_video_parser.add_argument("--collection", default=None, help="Optional collection name")
     add_runtime_flags(baijiahao_upload_video_parser)
 
+    # ---- review: compliance pre-review (YouTube gate -> multi-platform publish) ----
+    review_parser = platform_parsers.add_parser(
+        "review",
+        help="Compliance pre-review: upload private to YouTube, check content/copyright, then publish",
+    )
+    review_parser.add_argument("--file", required=True, type=existing_file_path, help="Video file path")
+    review_parser.add_argument("--title", required=True, help="Video title")
+    review_parser.add_argument("--desc", default="", help="Optional video description")
+    review_parser.add_argument("--tags", default="", help="Comma-separated tags, such as tag1,tag2")
+    review_parser.add_argument(
+        "--platforms", default="youtube",
+        help="Comma-separated target platforms: youtube,tiktok (default: youtube)",
+    )
+    review_parser.add_argument("--youtube-account", required=True, help="YouTube account name for OAuth")
+    review_parser.add_argument("--tiktok-account", default="", help="TikTok account name (required if --platforms includes tiktok)")
+    review_parser.add_argument("--schedule", type=schedule_value, help=f"Schedule publish time in {schedule_help}")
+    review_parser.add_argument("--category-id", default="22", help="YouTube video category ID (default: 22 = People & Blogs)")
+    review_parser.add_argument("--made-for-kids", action="store_true", help="Declare video as made for kids")
+    review_parser.add_argument("--synthetic-media", action="store_true", help="Declare video contains AI-generated/synthetic content")
+
     return parser
 
 
 async def dispatch(args: argparse.Namespace) -> int:
+    if args.platform == "review":
+        from uploader.compliance import ReviewRequest, run_review
+
+        platforms = [p.strip().lower() for p in args.platforms.split(",") if p.strip()]
+        if "tiktok" in platforms and not args.tiktok_account:
+            raise RuntimeError("--tiktok-account is required when --platforms includes tiktok")
+
+        request = ReviewRequest(
+            video_file=args.file,
+            title=args.title,
+            description=args.desc,
+            tags=parse_tags(args.tags),
+            youtube_account=args.youtube_account,
+            tiktok_account=args.tiktok_account,
+            platforms=platforms,
+            schedule=args.schedule if hasattr(args, "schedule") and args.schedule else None,
+            category_id=args.category_id,
+            made_for_kids=args.made_for_kids,
+            contains_synthetic_media=args.synthetic_media,
+        )
+
+        print(f"Starting compliance review for: {request.video_file.name}")
+        print(f"Target platforms: {', '.join(platforms)}")
+        print()
+
+        outcome = run_review(request)
+        outcome.print_report()
+
+        if outcome.success:
+            print("All done. Content passed review and was published successfully.")
+            return 0
+        elif outcome.compliance and not outcome.compliance.passed:
+            print(
+                "Content did NOT pass YouTube compliance review. Publishing was aborted.",
+                file=sys.stderr,
+            )
+            return 2
+        else:
+            print(
+                "Review completed with errors. Check the report above.",
+                file=sys.stderr,
+            )
+            return 1
+
     if args.platform == "douyin":
         if args.action == "login":
             result = await login_douyin_account(args.account, headless=args.headless)
