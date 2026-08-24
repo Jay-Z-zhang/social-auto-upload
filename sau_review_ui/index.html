@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>发布台</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --ink: #1c1914;
+      --muted: #6b6459;
+      --card: #fffdf8;
+      --line: #e2d8c8;
+      --accent: #b45309;
+      --ok: #3f6f4a;
+      --bad: #9f2d2d;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 "Songti SC", "Source Han Serif SC", "Noto Serif SC", Georgia, serif; }
+    body { padding: 32px 20px 64px; }
+    main { max-width: 760px; margin: 0 auto; }
+    h1 { font-size: 28px; font-weight: 600; margin: 0 0 6px; letter-spacing: 0.04em; }
+    .lede { color: var(--muted); margin: 0 0 28px; }
+    section {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 20px 22px;
+      margin-bottom: 16px;
+    }
+    h2 { font-size: 15px; margin: 0 0 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; font-family: ui-sans-serif, system-ui, sans-serif; }
+    input[type="text"], input[type="number"], select {
+      width: 100%;
+      padding: 9px 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      font: 14px/1.4 ui-sans-serif, system-ui, sans-serif;
+    }
+    .row { display: grid; gap: 12px; margin-bottom: 12px; }
+    .row.cols-2 { grid-template-columns: 1fr 1fr; }
+    .row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .checks { display: flex; flex-wrap: wrap; gap: 14px 18px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 14px; }
+    .checks label { margin: 0; color: var(--ink); display: flex; align-items: center; gap: 6px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+    button {
+      font: 14px/1 ui-sans-serif, system-ui, sans-serif;
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      color: #fffdf8;
+      border-radius: 999px;
+      padding: 10px 16px;
+      cursor: pointer;
+    }
+    button.ghost { background: transparent; color: var(--ink); }
+    button.danger { background: transparent; color: var(--bad); border-color: var(--bad); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .hint { font-size: 13px; color: var(--muted); margin: 10px 0 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    .warn { color: var(--bad); }
+    .ok { color: var(--ok); }
+    ul.files { list-style: none; padding: 0; margin: 8px 0 0; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; }
+    ul.files li { padding: 7px 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; }
+    ul.files li:last-child { border-bottom: 0; }
+    .muted { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-weight: 500; }
+    pre {
+      margin: 0;
+      max-height: 320px;
+      overflow: auto;
+      background: #1c1914;
+      color: #f4efe6;
+      border-radius: 10px;
+      padding: 14px;
+      font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .status { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; margin-bottom: 8px; }
+    .error { color: var(--bad); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; min-height: 1.2em; margin-top: 8px; }
+    @media (max-width: 640px) {
+      .row.cols-2, .row.cols-3 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>发布台</h1>
+    <p class="lede">先私密上传到 YouTube 做合规检查，通过后再按排期公开。TikTok 未过审时仍只能发仅自己可见。</p>
+
+    <section>
+      <h2>视频</h2>
+      <div class="row">
+        <div>
+          <label for="dir">文件夹路径</label>
+          <input id="dir" type="text" placeholder="/Users/你/Desktop/shorts" autocomplete="off">
+        </div>
+      </div>
+      <div class="actions">
+        <button type="button" class="ghost" id="scanBtn">扫描视频</button>
+      </div>
+      <p class="hint" id="scanHint">可放同名 .txt：第 1 行标题，第 2 行标签，后面是简介。</p>
+      <ul class="files" id="fileList"></ul>
+    </section>
+
+    <section>
+      <h2>账号与节奏</h2>
+      <div class="row cols-2">
+        <div>
+          <label for="yt">YouTube 账号</label>
+          <input id="yt" type="text" list="ytAccounts" value="local_test">
+          <datalist id="ytAccounts"></datalist>
+        </div>
+        <div>
+          <label for="tk">TikTok 账号</label>
+          <input id="tk" type="text" list="tkAccounts" value="local_test">
+          <datalist id="tkAccounts"></datalist>
+        </div>
+      </div>
+      <div class="row">
+        <div class="checks">
+          <label><input type="checkbox" id="platYt" checked> YouTube</label>
+          <label><input type="checkbox" id="platTk"> TikTok</label>
+          <label><input type="checkbox" id="shorts" checked> 当作 Shorts（加 #Shorts）</label>
+        </div>
+      </div>
+      <div class="row cols-3">
+        <div>
+          <label for="perDay">每天公开条数</label>
+          <input id="perDay" type="number" min="1" max="6" value="2">
+        </div>
+        <div>
+          <label for="times">每天时刻（小时）</label>
+          <input id="times" type="text" value="12,19">
+        </div>
+        <div>
+          <label for="startDays">几天后开始</label>
+          <input id="startDays" type="number" min="0" max="30" value="1">
+        </div>
+      </div>
+      <p class="hint">预览后以表格时间为准。默认每天 2 条，12:00 和 19:00。YouTube 免费配额大约每天 6 次上传。</p>
+    </section>
+
+    <section>
+      <div class="actions">
+        <button type="button" class="ghost" id="previewBtn">预览排期</button>
+        <button type="button" class="ghost" id="dryBtn">空跑（不上传）</button>
+        <button type="button" id="runBtn">开始发布</button>
+        <button type="button" class="danger" id="stopBtn" disabled>停止</button>
+      </div>
+      <p class="error" id="error"></p>
+    </section>
+
+    <section>
+      <h2>排期</h2>
+      <div id="scheduleWrap"><p class="hint">先扫描并预览。</p></div>
+    </section>
+
+    <section>
+      <h2>日志</h2>
+      <p class="status muted" id="jobStatus">空闲</p>
+      <pre id="log">等待任务…</pre>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let pollTimer = null;
+
+    function formPayload() {
+      const platforms = [];
+      if ($("platYt").checked) platforms.push("youtube");
+      if ($("platTk").checked) platforms.push("tiktok");
+      return {
+        dir: $("dir").value.trim(),
+        youtube_account: $("yt").value.trim(),
+        tiktok_account: $("tk").value.trim(),
+        platforms,
+        per_day: Number($("perDay").value || 2),
+        times: $("times").value.trim(),
+        start_days: Number($("startDays").value || 1),
+        shorts: $("shorts").checked,
+      };
+    }
+
+    async function api(path, options) {
+      const res = await fetch(path, options);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      return data;
+    }
+
+    function setError(msg) {
+      $("error").textContent = msg || "";
+    }
+
+    function renderFiles(data) {
+      const hint = $("scanHint");
+      hint.textContent = `找到 ${data.count} 个视频。YouTube 当天大约还能传 ${data.quota} 条。`;
+      hint.className = "hint" + (data.over_quota ? " warn" : "");
+      $("fileList").innerHTML = (data.videos || []).map((v) => {
+        const extra = v.has_sidecar ? "有文案" : "用文件名当标题";
+        return `<li><span>${v.name}<br><span class="muted">${v.title}</span></span><span class="muted">${extra}</span></li>`;
+      }).join("");
+    }
+
+    function renderSchedule(rows) {
+      if (!rows || !rows.length) {
+        $("scheduleWrap").innerHTML = '<p class="hint">没有排期。</p>';
+        return;
+      }
+      $("scheduleWrap").innerHTML = `<table><thead><tr><th>公开时间</th><th>文件</th><th>标题</th></tr></thead><tbody>${
+        rows.map((r) => `<tr><td>${r.when}</td><td>${r.file}</td><td>${r.title}</td></tr>`).join("")
+      }</tbody></table>`;
+    }
+
+    async function loadAccounts() {
+      try {
+        const data = await api("/api/accounts");
+        $("ytAccounts").innerHTML = (data.youtube || []).map((n) => `<option value="${n}">`).join("");
+        $("tkAccounts").innerHTML = (data.tiktok || []).map((n) => `<option value="${n}">`).join("");
+        if (data.youtube && data.youtube.length && !$("yt").value) $("yt").value = data.youtube[0];
+        if (data.tiktok && data.tiktok.length && !$("tk").value) $("tk").value = data.tiktok[0];
+      } catch (_) { /* ignore */ }
+    }
+
+    async function scan() {
+      setError("");
+      const payload = formPayload();
+      if (!payload.dir) return setError("请填写文件夹路径");
+      const data = await api("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dir: payload.dir }),
+      });
+      renderFiles(data);
+    }
+
+    async function preview() {
+      setError("");
+      const data = await api("/api/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formPayload()),
+      });
+      renderFiles(data);
+      renderSchedule(data.schedule);
+    }
+
+    function renderJob(job) {
+      $("jobStatus").textContent = job.running
+        ? "运行中…"
+        : (job.returncode == null ? "空闲" : `已结束，退出码 ${job.returncode}`);
+      $("jobStatus").className = "status " + (job.running ? "ok" : "muted");
+      $("log").textContent = (job.logs && job.logs.length) ? job.logs.join("\n") : "等待任务…";
+      $("log").scrollTop = $("log").scrollHeight;
+      $("runBtn").disabled = !!job.running;
+      $("stopBtn").disabled = !job.running;
+    }
+
+    async function pollJob() {
+      const job = await api("/api/job");
+      renderJob(job);
+      if (!job.running && pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
+
+    function startPolling() {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(pollJob, 800);
+      pollJob();
+    }
+
+    async function runJob(dryRun) {
+      setError("");
+      const payload = formPayload();
+      if (!payload.platforms.length) return setError("至少勾选一个平台");
+      if (!dryRun) {
+        const ok = confirm("会立刻私密上传到 YouTube 做审核，通过后按排期公开。确定开始？");
+        if (!ok) return;
+      }
+      payload.dry_run = dryRun;
+      await api("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      startPolling();
+    }
+
+    $("scanBtn").onclick = () => scan().catch((e) => setError(e.message));
+    $("previewBtn").onclick = () => preview().catch((e) => setError(e.message));
+    $("dryBtn").onclick = () => runJob(true).catch((e) => setError(e.message));
+    $("runBtn").onclick = () => runJob(false).catch((e) => setError(e.message));
+    $("stopBtn").onclick = () => api("/api/stop", { method: "POST" }).then(pollJob).catch((e) => setError(e.message));
+
+    loadAccounts();
+    pollJob().catch(() => {});
+  </script>
+</body>
+</html>

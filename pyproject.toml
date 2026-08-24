@@ -23,6 +23,7 @@ dependencies = [
 
 [project.scripts]
 sau = "sau_cli:main"
+sau-web = "sau_review_web:main"
 
 [project.optional-dependencies]
 web = [
@@ -34,7 +35,7 @@ web = [
 package = true
 
 [tool.setuptools]
-py-modules = ["cli_main", "conf", "sau_cli"]
+py-modules = ["cli_main", "conf", "sau_cli", "sau_review_web"]
 include-package-data = true
 
 [tool.setuptools.packages.find]

@@ -81,8 +81,8 @@
 | 支付宝生活号 | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ | 浏览器自动化，支持生活号视频 |
 | 微博 | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ | 浏览器自动化，标题最多 30 字 |
 | 虎扑 | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ | 浏览器自动化，标题 4–40 字 |
-| TikTok | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | 当前示例走 Chrome 版实现 |
-| YouTube | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ | 浏览器自动化（Studio），支持加入播放列表/可见性 |
+| TikTok | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | 浏览器示例；`sau review` 走 Content Posting API |
+| YouTube | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | `sau youtube` 走 Studio；`sau review` 走 Data API 预审后可定时公开 |
 
 ### AI这么强，为什么还需要这个项目
 在你使用AI的能力，browser agent等等，每次都让 agent 重新解析网页、截图理解, 临场判断
@@ -122,6 +122,7 @@ AI的发展毋庸置疑，希望你遇到这种安装和使用，不要再怯场
 ### 补充说明：
 
 - CLI 使用请看：[CLI 使用说明](./docs/CLI.md)
+- YouTube 合规预审后再发 YouTube / TikTok：[合规预审说明](./docs/compliance-setup.md)
 - 如果你准备在 `OpenClaw`、`Codex`、`Claude Code / cc` 里使用本项目，先看：[Agent Bootstrap Prompt](./docs/agent-bootstrap.md)
 - agent / skill 请看：[Douyin Upload Skill](./skills/douyin-upload/SKILL.md)
 - agent / skill 请看：[Kuaishou Upload Skill](./skills/kuaishou-upload/SKILL.md)
@@ -214,9 +215,15 @@ sau hupu upload-video --account <account_name> --file videos/demo.mp4 --title "�
 sau youtube login --account <account_name>
 sau youtube check --account <account_name>
 sau youtube upload-video --account <account_name> --file videos/demo.mp4 --title "示例标题" --desc "示例简介" --tags tag1,tag2 --playlist "我的系列" --visibility public
+
+sau review --file videos/demo.mp4 --title "示例标题" --youtube-account <account_name> --platforms youtube --shorts
+sau review-batch --dir videos --youtube-account <account_name> --shorts --dry-run
+python sau_review_web.py
 ```
 
-> YouTube 说明：登录是交互式的（Google 账号，浏览器里完成，无二维码）。这里走浏览器自动化而不是官方 API，
+> YouTube 合规预审：`sau review` / `sau review-batch` 走 YouTube Data API（先私密上传，审核通过后再公开或定时公开，可选再发 TikTok）。本机页面 `python sau_review_web.py` 打开 `http://127.0.0.1:8765`。一次性配置见 [合规预审说明](./docs/compliance-setup.md)。
+
+> YouTube 说明：`sau youtube` 登录是交互式的（Google 账号，浏览器里完成，无二维码）。这里走浏览器自动化而不是官方 API，
 > 是因为**未通过 Google 合规审核的 API 项目上传的视频会被强制锁为私享、无法改公开**，对个人/单频道不实用；
 > 浏览器自动化没有此限制，可直接发布公开视频，也与本项目其它平台的 cookie 方案一致。
 > `--playlist` 适合连载/系列追更；`--visibility` 可选 `public`/`unlisted`/`private`。

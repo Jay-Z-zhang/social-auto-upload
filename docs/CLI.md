@@ -12,6 +12,7 @@
 - `weibo`
 - `hupu`
 - `youtube`
+- `review` / `review-batch`（YouTube 合规预审后再发 YouTube / TikTok）
 
 实现说明：
 
@@ -46,6 +47,8 @@ sau alipay --help
 sau weibo --help
 sau hupu --help
 sau youtube --help
+sau review --help
+sau review-batch --help
 ```
 
 ## 安装 patchright 浏览器
@@ -162,7 +165,52 @@ sau youtube check --account <account_name>
 sau youtube upload-video --account <account_name> --file videos/demo.mp4 --title "示例标题" --desc "示例简介" --tags tag1,tag2 --playlist "我的系列" --visibility public
 ```
 
-YouTube 登录需要在浏览器中完成 Google 账号登录，不使用二维码。`--visibility` 可选 `public`、`unlisted` 或 `private`，`--playlist` 可选。
+YouTube 登录需要在浏览器中完成 Google 账号登录，不使用二维码。`--visibility` 可选 `public`、`unlisted` 或 `private`，`--playlist` 可选。这条路径走浏览器自动化（Studio），和下面的 `sau review` 官方 API 预审不是同一套。
+
+## 合规预审（YouTube 门控 → YouTube / TikTok）
+
+先把视频以 **私密** 传到 YouTube，等官方内容/版权检查通过后，再公开 YouTube，并可选发 TikTok。一次性配置见 [合规预审说明](./compliance-setup.md)。
+
+单条：
+
+```bash
+sau review \
+  --file videos/demo.mp4 \
+  --title "示例标题" \
+  --desc "示例简介" \
+  --tags tag1,tag2 \
+  --youtube-account <account_name> \
+  --platforms youtube \
+  --shorts
+```
+
+批量定时（先空跑看排期，再真正上传）：
+
+```bash
+sau review-batch --dir videos --youtube-account <account_name> --shorts --dry-run
+sau review-batch --dir videos --youtube-account <account_name> --shorts --per-day 2 --times 12,19
+```
+
+连 TikTok（未过审时只能发仅自己可见）：
+
+```bash
+sau review-batch \
+  --dir videos \
+  --youtube-account <account_name> \
+  --tiktok-account <account_name> \
+  --platforms youtube,tiktok \
+  --shorts
+```
+
+本机页面（扫描文件夹、预览排期、看日志）：
+
+```bash
+python sau_review_web.py
+# 或
+sau-web
+```
+
+浏览器打开 `http://127.0.0.1:8765`。页面只监听本机，不会对外提供服务。
 
 ## 微博 CLI 子命令
 

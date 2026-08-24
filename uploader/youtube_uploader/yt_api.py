@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -274,8 +274,10 @@ class YouTubeAPI:
         youtube_logger.success(f"Video {video_id} is now PUBLIC.")
 
     def schedule_publish(self, video_id: str, publish_at: datetime) -> None:
-        """Schedule a private video to go public at *publish_at* (UTC ISO-8601)."""
-        iso = publish_at.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        """Schedule a private video to go public at *publish_at* (local naive or aware)."""
+        if publish_at.tzinfo is None:
+            publish_at = publish_at.replace(tzinfo=datetime.now().astimezone().tzinfo)
+        iso = publish_at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
         self.service.videos().update(
             part="status",
             body={

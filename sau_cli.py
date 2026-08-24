@@ -765,6 +765,13 @@ async def upload_hupu_video(request: HupuVideoUploadRequest) -> Path:
     return account_file
 
 
+def existing_dir_path(value: str) -> Path:
+    path = Path(value)
+    if not path.is_dir():
+        raise argparse.ArgumentTypeError(f"Directory not found: {value}")
+    return path
+
+
 def existing_file_path(value: str) -> Path:
     path = Path(value)
     if not path.is_file():
@@ -1052,6 +1059,27 @@ def build_parser() -> argparse.ArgumentParser:
     review_parser.add_argument("--category-id", default="22", help="YouTube video category ID (default: 22 = People & Blogs)")
     review_parser.add_argument("--made-for-kids", action="store_true", help="Declare video as made for kids")
     review_parser.add_argument("--synthetic-media", action="store_true", help="Declare video contains AI-generated/synthetic content")
+    review_parser.add_argument("--shorts", action="store_true", help="Treat as YouTube Short: append #Shorts to title/description")
+
+    batch_parser = platform_parsers.add_parser(
+        "review-batch",
+        help="Batch compliance review with staggered YouTube schedules (anti-spam pacing)",
+    )
+    batch_parser.add_argument("--dir", required=True, type=existing_dir_path, help="Folder of video files")
+    batch_parser.add_argument(
+        "--platforms", default="youtube",
+        help="Comma-separated target platforms: youtube,tiktok (default: youtube)",
+    )
+    batch_parser.add_argument("--youtube-account", required=True, help="YouTube account name for OAuth")
+    batch_parser.add_argument("--tiktok-account", default="", help="TikTok account name (required if --platforms includes tiktok)")
+    batch_parser.add_argument("--per-day", type=int, default=2, help="How many videos go public per day (default: 2)")
+    batch_parser.add_argument(
+        "--times", default="12,19",
+        help="Local hours to publish, comma-separated (default: 12,19)",
+    )
+    batch_parser.add_argument("--start-days", type=int, default=1, help="Start after N days (default: 1 = tomorrow)")
+    batch_parser.add_argument("--shorts", action="store_true", help="Treat as YouTube Shorts: append #Shorts")
+    batch_parser.add_argument("--dry-run", action="store_true", help="Print the schedule only, do not upload")
 
     return parser
 
@@ -1076,6 +1104,7 @@ async def dispatch(args: argparse.Namespace) -> int:
             category_id=args.category_id,
             made_for_kids=args.made_for_kids,
             contains_synthetic_media=args.synthetic_media,
+            shorts=getattr(args, "shorts", False),
         )
 
         print(f"Starting compliance review for: {request.video_file.name}")
@@ -1100,6 +1129,37 @@ async def dispatch(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 1
+
+    if args.platform == "review-batch":
+        from uploader.compliance import run_batch_review
+
+        platforms = [p.strip().lower() for p in args.platforms.split(",") if p.strip()]
+        if "tiktok" in platforms and not args.tiktok_account:
+            raise RuntimeError("--tiktok-account is required when --platforms includes tiktok")
+        hours = [int(h.strip()) for h in args.times.split(",") if h.strip()]
+        if args.per_day < 1:
+            raise RuntimeError("--per-day must be at least 1")
+        if args.per_day > 3:
+            print(
+                "Warning: more than 3 public posts/day is more likely to look like spam.",
+                file=sys.stderr,
+            )
+
+        outcomes = run_batch_review(
+            directory=args.dir,
+            youtube_account=args.youtube_account,
+            tiktok_account=args.tiktok_account,
+            platforms=platforms,
+            per_day=args.per_day,
+            daily_hours=hours,
+            start_days=args.start_days,
+            shorts=args.shorts,
+            dry_run=args.dry_run,
+        )
+        if args.dry_run:
+            return 0
+        failed = [o for o in outcomes if not o.success]
+        return 1 if failed else 0
 
     if args.platform == "douyin":
         if args.action == "login":

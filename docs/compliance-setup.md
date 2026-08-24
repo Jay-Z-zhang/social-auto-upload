@@ -196,6 +196,55 @@ sau review \
   --synthetic-media
 ```
 
+### YouTube Shorts
+
+```bash
+sau review \
+  --file short.mp4 \
+  --title "My Short" \
+  --youtube-account creator1 \
+  --shorts
+```
+
+`--shorts` appends `#Shorts` to the title/description if it is not already there.
+
+### Batch scheduled publish (`sau review-batch`)
+
+Put videos in one folder. Optional sibling `.txt` files: line 1 title, line 2 tags, remaining lines description.
+
+```
+shorts/
+  01.mp4
+  01.txt
+  02.mp4
+```
+
+Preview the schedule only:
+
+```bash
+sau review-batch \
+  --dir shorts \
+  --youtube-account creator1 \
+  --shorts \
+  --dry-run
+```
+
+Upload now (private), then stagger public times (default: 2 per day at 12:00 and 19:00 local time):
+
+```bash
+sau review-batch \
+  --dir shorts \
+  --youtube-account creator1 \
+  --tiktok-account creator1_tk \
+  --platforms youtube,tiktok \
+  --per-day 2 \
+  --times 12,19 \
+  --start-days 1 \
+  --shorts
+```
+
+YouTube API quota is about 6 `videos.insert` calls per day. The batch command refuses folders larger than that.
+
 ---
 
 ## 5. How It Works
@@ -235,7 +284,30 @@ sau review --file video.mp4 --title "Test" --youtube-account yt1 --platforms you
 
 ---
 
-## 6. Troubleshooting
+## 6. Local web UI
+
+A local page wraps `sau review-batch`: scan a folder, preview the schedule, dry-run, then run with live logs.
+
+```bash
+python sau_review_web.py
+# or, after `uv pip install -e .`:
+sau-web
+```
+
+It opens `http://127.0.0.1:8765` (bind is localhost only). This is not a public website and does not replace the TikTok Developer Portal.
+
+On the page:
+
+1. Paste the folder path and click **扫描视频**.
+2. Pick YouTube / TikTok account names (same names used in `cookies/youtube_oauth_*.json`).
+3. Click **预览排期**, then **空跑（不上传）** to confirm times.
+4. Click **开始发布** to upload privately to YouTube, wait for compliance, then schedule public times.
+
+Until the TikTok app passes Content Sharing audit, keep TikTok unchecked, or expect `SELF_ONLY` posts.
+
+---
+
+## 7. Troubleshooting
 
 ### "YouTube OAuth client secret file not found"
 Download `client_secret.json` from GCP Console → APIs & Services → Credentials.
