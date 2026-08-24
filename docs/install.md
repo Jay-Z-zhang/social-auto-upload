@@ -1,5 +1,7 @@
 # 安装说明
 
+仓库地址：https://github.com/Jay-Z-zhang/social-auto-upload
+
 这个文档分成两部分：
 
 - `For Humans`：给正常使用仓库的开发者、创作者、CLI 用户看
@@ -14,7 +16,7 @@
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/dreammis/social-auto-upload.git
+git clone https://github.com/Jay-Z-zhang/social-auto-upload.git
 cd social-auto-upload
 ```
 

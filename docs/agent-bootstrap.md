@@ -6,6 +6,7 @@
 
 当前主线已接入的平台：
 
+- `youtube` / `review` / `review-batch`（Jayz 日常在用的合规预审）
 - `bilibili`
 - `douyin`
 - `kuaishou`
@@ -36,8 +37,9 @@
 ```text
 你现在在一个名为 `social-auto-upload` 的仓库中工作。
 
-这是一个多平台社交媒体自动发布项目。当前主线已经接入：
+这是 Jayz 在用的多平台社交媒体自动发布项目。当前优先验证：
 
+- sau review / sau review-batch / sau-web（YouTube 合规预审）
 - bilibili
 - douyin
 - kuaishou
@@ -54,6 +56,7 @@
    - `docs/install.md`
    - `docs/CLI.md`
    - `docs/update.md`
+   - `docs/compliance-setup.md`
 5. 如果需要平台级操作，优先参考这些 skill：
    - `skills/douyin-upload/`
    - `skills/kuaishou-upload/`
@@ -64,6 +67,8 @@
 8. 如果是 Bilibili 登录，不要在非交互环境里强行代跑；应改为指导我在本地真实终端执行。
 9. 安装完成后，请优先验证以下命令：
    - `sau --help`
+   - `sau review --help`
+   - `sau review-batch --help`
    - `sau douyin --help`
    - `sau kuaishou --help`
    - `sau xiaohongshu --help`

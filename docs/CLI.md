@@ -1,6 +1,6 @@
 # CLI 使用说明
 
-项目现在提供一个统一的 CLI 入口 `sau`，当前主线已经接入：
+Jayz 这边用统一入口 `sau`。当前能跑的平台：
 
 - `douyin`
 - `kuaishou`

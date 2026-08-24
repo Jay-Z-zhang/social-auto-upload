@@ -1,11 +1,11 @@
 # Compliance Pre-Review Setup Guide
 
-The `sau review` command uses YouTube as a compliance gate: it uploads your video
-as **private** to YouTube, waits for YouTube's automated content/copyright checks
-to finish, and only publishes (on YouTube and optionally TikTok) if the video
-passes review.
+This is the flow Jayz actually uses: `sau review` uploads a video as **private**
+to YouTube, waits for YouTube's automated content/copyright checks, and only
+publishes (YouTube, optionally TikTok) if the video passes.
 
-This guide walks you through the one-time setup for both platforms.
+One-time setup for both platforms is below. The local page is
+`python sau_review_web.py` → `http://127.0.0.1:8765`.
 
 ---
 
