@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Publish Progress</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    background: #0f1115;
+    color: #e5e7ea;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    background: #16181d;
+    border-bottom: 1px solid #2a2d34;
+    padding: 12px 20px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  header h1 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: 0.02em;
+  }
+  header input[type=text] {
+    flex: 1;
+    max-width: 500px;
+    padding: 6px 10px;
+    background: #23262d;
+    border: 1px solid #333842;
+    border-radius: 4px;
+    color: inherit;
+    font: inherit;
+  }
+  header button {
+    padding: 6px 14px;
+    background: #4a90e2;
+    border: none;
+    border-radius: 4px;
+    color: white;
+    font: inherit;
+    cursor: pointer;
+  }
+  header button.secondary { background: #333842; }
+  header button.danger { background: #7d4a4a; }
+  header button:disabled { opacity: 0.5; cursor: not-allowed; }
+  header .meta { color: #8a8f9a; font-size: 13px; }
+  main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+  .bar-wrap {
+    height: 10px;
+    background: #23262d;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .bar {
+    height: 100%;
+    background: linear-gradient(90deg, #4a90e2 0%, #6bb56a 100%);
+    transition: width 0.4s ease;
+  }
+  .counts {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 24px;
+    font-size: 13px;
+    color: #8a8f9a;
+  }
+  .counts .num { color: #e5e7ea; font-weight: 600; }
+  .counts .done .num { color: #6bb56a; }
+  .counts .partial .num { color: #d9a557; }
+  .counts .error .num { color: #d97070; }
+  .counts .active .num { color: #4a90e2; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid #2a2d34;
+    vertical-align: top;
+  }
+  th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #8a8f9a;
+    font-weight: 500;
+    background: #16181d;
+    position: sticky;
+    top: 62px;
+  }
+  tr.active { background: rgba(74, 144, 226, 0.08); }
+  tr.error td:first-child { border-left: 3px solid #d97070; padding-left: 9px; }
+  tr.done td:first-child { border-left: 3px solid #6bb56a; padding-left: 9px; }
+  tr.partial td:first-child { border-left: 3px solid #d9a557; padding-left: 9px; }
+  tr.pending td:first-child { border-left: 3px solid #23262d; padding-left: 9px; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .badge.done { background: rgba(107, 181, 106, 0.2); color: #6bb56a; }
+  .badge.partial { background: rgba(217, 165, 87, 0.2); color: #d9a557; }
+  .badge.error { background: rgba(217, 112, 112, 0.2); color: #d97070; }
+  .badge.pending { background: rgba(138, 143, 154, 0.15); color: #8a8f9a; }
+  .badge.active {
+    background: rgba(74, 144, 226, 0.2);
+    color: #4a90e2;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 50% { opacity: 0.5; } }
+  .ep-cell {
+    font-weight: 600;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .file-name { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #8a8f9a; }
+  .theme { font-weight: 600; margin-bottom: 2px; }
+  .hook { color: #8a8f9a; font-size: 13px; }
+  a.link { color: #4a90e2; text-decoration: none; margin-right: 8px; font-size: 12px; }
+  a.link:hover { text-decoration: underline; }
+  .actions button {
+    padding: 4px 10px;
+    background: #333842;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    margin-right: 4px;
+  }
+  .actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .actions button.retry { background: #4a90e2; }
+  .actions button.reset { background: #7d4a4a; }
+  .empty {
+    padding: 60px 20px;
+    text-align: center;
+    color: #8a8f9a;
+  }
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 16px;
+    border-radius: 4px;
+    max-width: 400px;
+    display: none;
+    color: white;
+  }
+  .toast.visible { display: block; }
+  .error-line {
+    color: #d97070;
+    font-size: 12px;
+    margin-top: 4px;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .job-state { font-size: 12px; color: #8a8f9a; }
+  .job-state.running { color: #4a90e2; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🚀 Publish Progress</h1>
+  <input id="dirInput" type="text" placeholder="videos/dramaTest" spellcheck="false">
+  <button id="loadBtn">加载</button>
+  <button id="resumeBtn" class="secondary" title="重跑上一次批次；已完成集会自动跳过">继续上次批次</button>
+  <a id="workspaceLink" href="#" class="link" target="_blank" style="display:none">→ Workspace</a>
+  <span id="jobState" class="job-state"></span>
+</header>
+
+<main id="app">
+  <div class="empty">输入剧目目录，点击「加载」。页面每 3 秒自动刷新一次。</div>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const app = document.getElementById('app');
+const dirInput = document.getElementById('dirInput');
+const loadBtn = document.getElementById('loadBtn');
+const resumeBtn = document.getElementById('resumeBtn');
+const workspaceLink = document.getElementById('workspaceLink');
+const jobState = document.getElementById('jobState');
+const toast = document.getElementById('toast');
+let currentDir = '';
+let pollTimer = null;
+
+function showToast(msg, ok = false) {
+  toast.textContent = msg;
+  toast.style.background = ok ? '#6bb56a' : '#d97070';
+  toast.classList.add('visible');
+  setTimeout(() => toast.classList.remove('visible'), 3500);
+}
+
+async function loadData() {
+  const raw = dirInput.value.trim();
+  if (!raw) return showToast('填一个目录先');
+  loadBtn.disabled = true;
+  try {
+    const resp = await fetch('/api/progress?dir=' + encodeURIComponent(raw));
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'load failed');
+    currentDir = data.dir;
+    render(data);
+    schedulePoll();
+  } catch (e) {
+    showToast(e.message);
+    app.innerHTML = `<div class="empty">${e.message}</div>`;
+  } finally {
+    loadBtn.disabled = false;
+  }
+}
+
+function schedulePoll() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    if (!currentDir) return;
+    try {
+      const resp = await fetch('/api/progress?dir=' + encodeURIComponent(currentDir));
+      if (!resp.ok) return;
+      const data = await resp.json();
+      render(data);
+    } catch (_) {}
+  }, 3000);
+}
+
+function render(data) {
+  workspaceLink.href = '/workspace?dir=' + encodeURIComponent(currentDir);
+  workspaceLink.style.display = 'inline-block';
+
+  const seriesLine = data.series.active
+    ? `<strong>${escape(data.series.name)}</strong> · ${data.items.length} 集`
+    : `⚠ 未找到 series.yaml`;
+
+  const running = data.job.running;
+  const rc = data.job.returncode;
+  if (running) {
+    jobState.textContent = `● 批次运行中`;
+    jobState.className = 'job-state running';
+  } else if (rc !== null && rc !== undefined) {
+    jobState.textContent = `批次结束（exit=${rc}）`;
+    jobState.className = 'job-state';
+  } else {
+    jobState.textContent = '';
+  }
+
+  const c = data.counts;
+  const total = c.total || data.items.length;
+  const doneCount = c.done || 0;
+  const activeCount = data.items.filter(x => x.is_active).length;
+  const pct = total ? Math.round((doneCount / total) * 100) : 0;
+
+  const cts = `
+    <div>${seriesLine}</div>
+    <div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div>
+    <div class="counts">
+      <div class="done"><span class="num">${c.done || 0}</span> done</div>
+      <div class="partial"><span class="num">${c.partial || 0}</span> partial</div>
+      <div class="active"><span class="num">${activeCount}</span> uploading</div>
+      <div><span class="num">${c.pending || 0}</span> pending</div>
+      <div class="error"><span class="num">${c.error || 0}</span> error</div>
+    </div>
+  `;
+
+  const rows = data.items.map(item => rowHTML(item)).join('');
+  app.innerHTML = cts + `
+    <table>
+      <thead>
+        <tr>
+          <th style="width:70px">EP</th>
+          <th>Content</th>
+          <th style="width:110px">Status</th>
+          <th style="width:280px">Links</th>
+          <th style="width:180px">Actions</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  bindRowButtons();
+}
+
+function rowHTML(item) {
+  const rowClass = item.is_active ? 'active' : item.status;
+  const badgeClass = item.is_active ? 'active' : item.status;
+  const badgeText = item.is_active ? 'uploading' : item.status;
+  const epText = item.ep !== null ? String(item.ep).padStart(2, '0') : '??';
+
+  const ytLink = item.yt_video_id
+    ? `<a class="link" target="_blank" href="https://studio.youtube.com/video/${escape(item.yt_video_id)}/edit">YT Studio ↗</a>`
+    : '';
+  const shortsLink = item.shorts_video_id
+    ? `<a class="link" target="_blank" href="https://studio.youtube.com/video/${escape(item.shorts_video_id)}/edit">Shorts ↗</a>`
+    : '';
+  const ttLink = item.tt_publish_id
+    ? `<span class="link" style="cursor:default">TT: ${escape(item.tt_publish_id.slice(0, 12))}…</span>`
+    : '';
+  const scheduled = item.yt_scheduled_at
+    ? `<div class="file-name">→ ${escape(item.yt_scheduled_at.slice(0, 16).replace('T', ' '))}</div>`
+    : '';
+  const errLine = item.last_error && item.status !== 'done'
+    ? `<div class="error-line">✗ ${escape(item.last_error)}</div>`
+    : '';
+
+  return `
+    <tr class="${rowClass}" data-ep="${item.ep ?? ''}">
+      <td class="ep-cell">EP ${epText}</td>
+      <td>
+        <div class="theme">${escape(item.theme || '—')}</div>
+        <div class="hook">${escape(item.hook || '')}</div>
+        <div class="file-name">${escape(item.file)}</div>
+        ${scheduled}
+        ${errLine}
+      </td>
+      <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+      <td>${ytLink}${shortsLink}${ttLink || '—'}</td>
+      <td class="actions">
+        <button class="retry" data-act="retry" ${item.ep === null ? 'disabled' : ''}>Retry</button>
+        <button class="reset" data-act="reset" ${item.ep === null ? 'disabled' : ''}>Reset</button>
+      </td>
+    </tr>
+  `;
+}
+
+function escape(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[c]);
+}
+
+function bindRowButtons() {
+  app.querySelectorAll('button[data-act=retry]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const ep = parseInt(btn.closest('tr').dataset.ep);
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        const resp = await fetch('/api/retry-episode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dir: currentDir, ep }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'retry failed');
+        showToast(`Retry EP ${ep} started`, true);
+        setTimeout(loadData, 1500);
+      } catch (e) {
+        showToast(e.message);
+        btn.disabled = false;
+        btn.textContent = 'Retry';
+      }
+    });
+  });
+  app.querySelectorAll('button[data-act=reset]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const ep = parseInt(btn.closest('tr').dataset.ep);
+      if (!confirm(`Reset manifest for EP ${ep}? Next batch will re-upload it.`)) return;
+      try {
+        const resp = await fetch('/api/reset-episode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dir: currentDir, ep }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'reset failed');
+        showToast(`Cleared ${data.cleared} row(s)`, true);
+        loadData();
+      } catch (e) { showToast(e.message); }
+    });
+  });
+}
+
+resumeBtn.addEventListener('click', async () => {
+  if (!confirm('继续跑上一次批次？已完成的集会自动跳过。')) return;
+  resumeBtn.disabled = true;
+  try {
+    const resp = await fetch('/api/resume-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'resume failed');
+    showToast('批次已重启', true);
+    setTimeout(loadData, 1500);
+  } catch (e) {
+    showToast(e.message);
+  } finally {
+    resumeBtn.disabled = false;
+  }
+});
+
+loadBtn.addEventListener('click', loadData);
+dirInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadData(); });
+
+// Pre-fill from ?dir=... or from current_batch.json.
+const params = new URLSearchParams(location.search);
+if (params.has('dir')) {
+  dirInput.value = params.get('dir');
+  loadData();
+} else {
+  fetch('/api/current-batch').then(r => r.json()).then(d => {
+    if (d.batch && d.batch.dir) {
+      dirInput.value = d.batch.dir;
+      loadData();
+    }
+  }).catch(() => {});
+}
+</script>
+</body>
+</html>

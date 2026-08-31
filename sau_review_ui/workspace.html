@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Episode Workspace</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    background: #0f1115;
+    color: #e5e7ea;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    background: #16181d;
+    border-bottom: 1px solid #2a2d34;
+    padding: 12px 20px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header h1 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: 0.02em;
+  }
+  header input[type=text] {
+    flex: 1;
+    max-width: 500px;
+    padding: 6px 10px;
+    background: #23262d;
+    border: 1px solid #333842;
+    border-radius: 4px;
+    color: inherit;
+    font: inherit;
+  }
+  header button, .card button {
+    padding: 6px 14px;
+    background: #4a90e2;
+    border: none;
+    border-radius: 4px;
+    color: white;
+    font: inherit;
+    cursor: pointer;
+  }
+  header button:disabled, .card button:disabled { opacity: 0.5; cursor: not-allowed; }
+  header .meta { color: #8a8f9a; font-size: 13px; }
+  main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+  .card {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 20px;
+    padding: 16px;
+    background: #16181d;
+    border: 1px solid #2a2d34;
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+  .cover {
+    background: #0a0b0e;
+    border-radius: 4px;
+    overflow: hidden;
+    aspect-ratio: 16 / 9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    font-size: 12px;
+    text-align: center;
+    padding: 8px;
+    position: relative;
+  }
+  .cover img { width: 100%; height: 100%; object-fit: cover; }
+  .cover-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .cover-actions button {
+    background: #333842;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+  .cover-actions button.primary { background: #4a90e2; }
+  .fields { display: flex; flex-direction: column; gap: 10px; }
+  .field label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #8a8f9a;
+    margin-bottom: 4px;
+  }
+  .field input, .field textarea {
+    width: 100%;
+    padding: 8px 10px;
+    background: #0f1115;
+    border: 1px solid #2a2d34;
+    border-radius: 4px;
+    color: inherit;
+    font: inherit;
+    resize: vertical;
+  }
+  .field input:focus, .field textarea:focus {
+    outline: none;
+    border-color: #4a90e2;
+  }
+  .field textarea { min-height: 60px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .file-name { color: #8a8f9a; font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+  .ep-badge {
+    display: inline-block;
+    background: #4a90e2;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 600;
+    margin-right: 8px;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+  .ep-badge.missing { background: #7d4a4a; }
+  .status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-left: 6px;
+  }
+  .status-badge.done { background: rgba(107, 181, 106, 0.2); color: #6bb56a; }
+  .status-badge.partial { background: rgba(217, 165, 87, 0.2); color: #d9a557; }
+  .status-badge.error { background: rgba(217, 112, 112, 0.2); color: #d97070; }
+  .status-badge.pending { background: rgba(138, 143, 154, 0.15); color: #8a8f9a; }
+  .save-status {
+    font-size: 12px;
+    color: #6ba75a;
+    margin-left: 8px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .save-status.visible { opacity: 1; }
+  .save-status.error { color: #d97070; }
+  .empty {
+    padding: 60px 20px;
+    text-align: center;
+    color: #8a8f9a;
+  }
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #d97070;
+    color: white;
+    padding: 12px 16px;
+    border-radius: 4px;
+    max-width: 400px;
+    display: none;
+  }
+  .toast.visible { display: block; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📺 Episode Workspace</h1>
+  <input id="dirInput" type="text" placeholder="videos/dramaTest" spellcheck="false">
+  <button id="loadBtn">加载</button>
+  <a id="progressLink" href="#" style="color:#4a90e2;text-decoration:none;font-size:13px;display:none">→ Progress</a>
+  <span id="meta" class="meta"></span>
+</header>
+
+<main id="app">
+  <div class="empty">请在上方输入目录（相对路径或绝对路径），然后点击「加载」。</div>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const app = document.getElementById('app');
+const dirInput = document.getElementById('dirInput');
+const loadBtn = document.getElementById('loadBtn');
+const meta = document.getElementById('meta');
+const toast = document.getElementById('toast');
+let currentDir = '';
+
+function showToast(msg, isError = true) {
+  toast.textContent = msg;
+  toast.style.background = isError ? '#d97070' : '#6ba75a';
+  toast.classList.add('visible');
+  setTimeout(() => toast.classList.remove('visible'), 3500);
+}
+
+async function loadData() {
+  const raw = dirInput.value.trim();
+  if (!raw) return showToast('填一个目录先');
+  loadBtn.disabled = true;
+  try {
+    const resp = await fetch('/api/workspace/data?dir=' + encodeURIComponent(raw));
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'load failed');
+    currentDir = data.dir;
+    render(data);
+  } catch (e) {
+    showToast(e.message);
+    app.innerHTML = `<div class="empty">${e.message}</div>`;
+  } finally {
+    loadBtn.disabled = false;
+  }
+}
+
+function render(data) {
+  const s = data.series;
+  const progressLink = document.getElementById('progressLink');
+  progressLink.href = '/progress?dir=' + encodeURIComponent(currentDir);
+  progressLink.style.display = 'inline-block';
+  meta.textContent = s.active
+    ? `${s.name} · ${data.items.length} 集 · episodes.yaml ${data.episodes_yaml_exists ? '已加载' : '未创建'}`
+    : `⚠ 未找到 series.yaml — 保存元数据会新建 episodes.yaml，但封面无法生成`;
+
+  if (data.items.length === 0) {
+    app.innerHTML = `<div class="empty">目录里没有视频文件。</div>`;
+    return;
+  }
+  app.innerHTML = data.items.map(cardHTML).join('');
+  data.items.forEach(bindCard);
+}
+
+function cardHTML(item) {
+  const epBadge = item.ep !== null
+    ? `<span class="ep-badge">EP ${String(item.ep).padStart(2, '0')}</span>`
+    : `<span class="ep-badge missing">??</span>`;
+  const statusBadge = item.status
+    ? `<span class="status-badge ${item.status}">${item.status}</span>`
+    : '';
+  const coverInner = item.has_cover
+    ? `<img src="${item.cover_url}">`
+    : '未生成封面';
+  return `
+    <div class="card" data-file="${item.file}" data-ep="${item.ep ?? ''}">
+      <div>
+        <div class="cover">${coverInner}</div>
+        <div class="cover-actions">
+          <button data-act="regen">${item.has_cover ? '重新生成封面' : '生成封面'}</button>
+        </div>
+        <div style="margin-top:8px">
+          ${epBadge}${statusBadge}<span class="file-name" style="margin-left:6px">${item.file}</span>
+        </div>
+      </div>
+      <div class="fields">
+        <div class="field">
+          <label>Theme（封面主题，3-6 词 UPPERCASE）</label>
+          <input data-k="theme" value="${escape(item.theme)}">
+        </div>
+        <div class="field">
+          <label>Hook（标题钩子，6-14 词）</label>
+          <input data-k="hook" value="${escape(item.hook)}">
+        </div>
+        <div class="field">
+          <label>Description</label>
+          <textarea data-k="description">${escape(item.description)}</textarea>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>YouTube tags（逗号分隔）</label>
+            <input data-k="tags" value="${escape(item.tags.join(', '))}">
+          </div>
+          <div class="field">
+            <label>TikTok tags（可选，逗号分隔）</label>
+            <input data-k="tt_tags" value="${escape(item.tt_tags.join(', '))}">
+          </div>
+        </div>
+        <div>
+          <button data-act="save">保存</button>
+          <span class="save-status" data-status></span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function escape(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[c]);
+}
+
+function bindCard(item) {
+  const card = app.querySelector(`.card[data-file="${cssEscape(item.file)}"]`);
+  if (!card) return;
+  const ep = item.ep;
+  const readFields = () => Object.fromEntries(
+    Array.from(card.querySelectorAll('[data-k]')).map(el => [el.dataset.k, el.value])
+  );
+
+  card.querySelector('[data-act=save]').addEventListener('click', async (e) => {
+    if (ep === null) return showToast('这个文件没有集数，无法保存');
+    const raw = readFields();
+    const payload = {
+      dir: currentDir,
+      ep,
+      theme: raw.theme.trim(),
+      hook: raw.hook.trim(),
+      description: raw.description.trim(),
+      tags: raw.tags.split(',').map(s => s.trim()).filter(Boolean),
+      tt_tags: raw.tt_tags.split(',').map(s => s.trim()).filter(Boolean),
+    };
+    e.target.disabled = true;
+    const status = card.querySelector('[data-status]');
+    try {
+      const resp = await fetch('/api/workspace/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'save failed');
+      status.textContent = '✓ 已保存';
+      status.classList.remove('error');
+      status.classList.add('visible');
+      setTimeout(() => status.classList.remove('visible'), 2500);
+    } catch (err) {
+      status.textContent = '✗ ' + err.message;
+      status.classList.add('visible', 'error');
+    } finally {
+      e.target.disabled = false;
+    }
+  });
+
+  card.querySelector('[data-act=regen]').addEventListener('click', async (e) => {
+    if (ep === null) return showToast('这个文件没有集数，无法生成封面');
+    const themeInput = card.querySelector('[data-k=theme]');
+    e.target.disabled = true;
+    e.target.textContent = '生成中…';
+    try {
+      const resp = await fetch('/api/workspace/regen-cover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dir: currentDir,
+          file: item.file,
+          theme: themeInput.value.trim(),
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'regen failed');
+      card.querySelector('.cover').innerHTML = `<img src="${data.cover_url}">`;
+      e.target.textContent = '重新生成封面';
+    } catch (err) {
+      showToast(err.message);
+      e.target.textContent = '生成失败，重试';
+    } finally {
+      e.target.disabled = false;
+    }
+  });
+}
+
+function cssEscape(s) {
+  // Prefer native CSS.escape (handles Unicode, dots, brackets etc.).
+  if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(s);
+  return String(s).replace(/[^a-zA-Z0-9_-]/g, c => '\\' + c);
+}
+
+loadBtn.addEventListener('click', loadData);
+dirInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadData(); });
+
+const params = new URLSearchParams(location.search);
+if (params.has('dir')) {
+  dirInput.value = params.get('dir');
+  loadData();
+}
+</script>
+</body>
+</html>

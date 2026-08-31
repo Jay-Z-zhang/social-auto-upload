@@ -22,3 +22,20 @@ COMPLIANCE_POLL_INTERVAL = 10
 COMPLIANCE_POLL_TIMEOUT = 600
 # Auto-delete the private YouTube video if compliance review fails.
 COMPLIANCE_DELETE_ON_FAIL = True
+
+# --- Audio copyright preflight (before the private YouTube upload) ---
+# Get a free key at https://acoustid.org/api-key . Empty string disables the check.
+ACOUSTID_API_KEY = ""
+# If AcoustID finds a match at or above this score, mark the video as blocked.
+# 0.85 is aggressive; drop to 0.6 for wider net at the cost of false positives.
+PREFLIGHT_MIN_SCORE = 0.85
+# When True, a match aborts the upload before it hits YouTube. When False, the
+# preflight only logs a warning and still uploads.
+PREFLIGHT_BLOCK_ON_MATCH = True
+
+# --- LLM metadata generation (sau gen-metadata) ---
+# DeepSeek uses an OpenAI-compatible chat completions endpoint.
+# Get a key at https://platform.deepseek.com . Empty string disables gen-metadata.
+DEEPSEEK_API_KEY = ""
+DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+DEEPSEEK_MODEL = "deepseek-chat"

@@ -17,6 +17,10 @@ import time
 from loguru import logger
 
 from uploader.youtube_uploader.yt_api import ComplianceResult, YouTubeAPI
+from uploader.preflight import PreflightResult, run_preflight
+from uploader.series import extract_ep_number, load_series, render_for_video
+from uploader.episodes import load_episodes
+from uploader.manifest import EpisodeState, get_state as manifest_get_state, upsert as manifest_upsert
 
 try:
     from conf import COMPLIANCE_DELETE_ON_FAIL
@@ -27,6 +31,14 @@ except ImportError:
 compliance_logger = logger.bind(business_name="compliance")
 
 
+def _ensure_shorts_in_title(title: str) -> str:
+    return title if "#shorts" in title.lower() else f"{title} #Shorts".strip()
+
+
+def _ensure_shorts_in_desc(desc: str) -> str:
+    return desc if "#shorts" in desc.lower() else f"{desc}\n#Shorts".strip()
+
+
 @dataclass
 class ReviewRequest:
     """Everything needed to run the compliance-review-then-publish flow."""
@@ -35,6 +47,7 @@ class ReviewRequest:
     title: str
     description: str = ""
     tags: list[str] = field(default_factory=list)
+    tt_tags: list[str] = field(default_factory=list)
     youtube_account: str = ""
     tiktok_account: str = ""
     platforms: list[str] = field(default_factory=lambda: ["youtube"])
@@ -43,21 +56,35 @@ class ReviewRequest:
     made_for_kids: bool = False
     contains_synthetic_media: bool = False
     shorts: bool = False
+    tiktok_prep: bool = True
+    tiktok_mirror: bool = False
+    youtube_playlist_id: str = ""
+    cover_path: Path | None = None
+    # Optional Shorts companion: additional YT upload (private→public, no compliance recheck)
+    shorts_variant_file: Path | None = None
+    shorts_playlist_id: str = ""
+    # Resume support: skip steps whose outcome is already recorded in the manifest.
+    resume_state: "object | None" = None
 
 
 @dataclass
 class ReviewOutcome:
     """Final result of the full review-and-publish pipeline."""
 
+    preflight: PreflightResult | None = None
     compliance: ComplianceResult | None = None
     youtube_published: bool = False
     tiktok_published: bool = False
     tiktok_publish_id: str = ""
     scheduled_at: datetime | None = None
+    shorts_published: bool = False
+    shorts_video_id: str = ""
     errors: list[str] = field(default_factory=list)
 
     @property
     def success(self) -> bool:
+        if self.preflight and self.preflight.blocked:
+            return False
         return (
             self.compliance is not None
             and self.compliance.passed
@@ -68,6 +95,14 @@ class ReviewOutcome:
         print("\n" + "=" * 60)
         print("  COMPLIANCE REVIEW REPORT")
         print("=" * 60)
+
+        if self.preflight and self.preflight.ran:
+            head = "BLOCKED" if self.preflight.blocked else ("MATCH" if self.preflight.matches else "PASSED")
+            print(f"  Audio preflight:     {head}")
+            for m in self.preflight.matches[:3]:
+                print(f"    · {m.label()}")
+        elif self.preflight and self.preflight.reason:
+            print(f"  Audio preflight:     SKIPPED ({self.preflight.reason})")
 
         if self.compliance:
             status = "PASSED" if self.compliance.passed else "FAILED"
@@ -88,6 +123,8 @@ class ReviewOutcome:
                 print("  YouTube:  Published")
         if self.tiktok_published:
             print(f"  TikTok:   Published (publish_id: {self.tiktok_publish_id})")
+        if self.shorts_published:
+            print(f"  Shorts:   Published (video_id: {self.shorts_video_id})")
 
         if self.errors:
             print()
@@ -109,6 +146,61 @@ def run_review(request: ReviewRequest) -> ReviewOutcome:
     5. Report results
     """
     outcome = ReviewOutcome()
+    resume = request.resume_state
+
+    # Full short-circuit: if the manifest says everything requested is already
+    # live, don't touch the source file at all. Preflight/YT/TikTok/Shorts all
+    # answered by the manifest.
+    yt_done_from_resume = bool(resume and getattr(resume, "yt_video_id", "") and resume.yt_published)
+    shorts_needed = bool(request.shorts_variant_file)
+    shorts_done_from_resume = bool(resume and getattr(resume, "shorts_video_id", "") and resume.shorts_published)
+    tt_needed = "tiktok" in request.platforms
+    tt_done_from_resume = bool(resume and getattr(resume, "tt_publish_id", "") and resume.tt_published)
+
+    if resume:
+        if yt_done_from_resume:
+            outcome.youtube_published = True
+            # Prefer the historical schedule the manifest recorded; only fall
+            # back to the caller-supplied schedule if the manifest didn't
+            # record one (older rows before this field existed).
+            if resume.yt_scheduled_at:
+                try:
+                    outcome.scheduled_at = datetime.fromisoformat(resume.yt_scheduled_at)
+                except ValueError:
+                    outcome.scheduled_at = request.schedule
+            else:
+                outcome.scheduled_at = request.schedule
+        if shorts_done_from_resume:
+            outcome.shorts_published = True
+            outcome.shorts_video_id = resume.shorts_video_id
+        if tt_done_from_resume:
+            outcome.tiktok_published = True
+            outcome.tiktok_publish_id = resume.tt_publish_id
+
+    # ------------------------------------------------------------------ #
+    # Step 0: Local audio copyright preflight (before we burn YT quota)
+    # ------------------------------------------------------------------ #
+    # Skip preflight only if there is no upload work left. If TikTok or Shorts
+    # is still pending, we still want the copyright signal in case the source
+    # was swapped between runs.
+    tt_pending = tt_needed and not tt_done_from_resume
+    shorts_pending = shorts_needed and not shorts_done_from_resume
+    if yt_done_from_resume and not tt_pending and not shorts_pending:
+        compliance_logger.info(
+            f"Resume: everything requested is already live for {request.video_file.name}; "
+            "skipping preflight + upload + compliance."
+        )
+        preflight = None
+    else:
+        preflight = run_preflight(request.video_file)
+        outcome.preflight = preflight
+        if preflight.ran and preflight.matches:
+            compliance_logger.warning(preflight.summary())
+        if preflight.blocked:
+            outcome.errors.append(
+                "Blocked by audio preflight — AcoustID matched a copyrighted recording."
+            )
+            return outcome
 
     # ------------------------------------------------------------------ #
     # Step 1+2: YouTube upload + compliance check
@@ -123,42 +215,53 @@ def run_review(request: ReviewRequest) -> ReviewOutcome:
     title = request.title
     description = request.description
     if request.shorts:
-        if "#Shorts" not in title and "#shorts" not in title.lower():
-            title = f"{title} #Shorts".strip()
-        if "#Shorts" not in description and "#shorts" not in description.lower():
-            description = f"{description}\n#Shorts".strip()
+        title = _ensure_shorts_in_title(title)
+        description = _ensure_shorts_in_desc(description)
 
-    try:
-        video_id = yt.upload_private(
-            file_path=request.video_file,
-            title=title,
-            description=description,
-            tags=request.tags,
-            category_id=request.category_id,
-            made_for_kids=request.made_for_kids,
-            contains_synthetic_media=request.contains_synthetic_media,
+    if yt_done_from_resume:
+        video_id = resume.yt_video_id
+    else:
+        try:
+            video_id = yt.upload_private(
+                file_path=request.video_file,
+                title=title,
+                description=description,
+                tags=request.tags,
+                category_id=request.category_id,
+                made_for_kids=request.made_for_kids,
+                contains_synthetic_media=request.contains_synthetic_media,
+            )
+        except Exception as exc:
+            outcome.errors.append(f"YouTube upload failed: {exc}")
+            return outcome
+
+        compliance = yt.check_compliance(video_id)
+        outcome.compliance = compliance
+
+        if not compliance.passed:
+            compliance_logger.error(compliance.summary)
+            if COMPLIANCE_DELETE_ON_FAIL:
+                try:
+                    yt.delete_video(video_id)
+                    compliance_logger.info(f"Deleted failed video {video_id} from YouTube.")
+                except Exception as exc:
+                    outcome.errors.append(f"Failed to delete video after rejection: {exc}")
+            return outcome
+
+    # Record the video_id back onto outcome. When resuming, the compliance
+    # verdict came from a previous run — synthesize a marker so downstream
+    # code (batch manifest writer, print_report) can uniformly access video_id.
+    if outcome.compliance is None:
+        outcome.compliance = ComplianceResult(
+            video_id=video_id,
+            passed=True,
+            upload_status="resumed",
         )
-    except Exception as exc:
-        outcome.errors.append(f"YouTube upload failed: {exc}")
-        return outcome
-
-    compliance = yt.check_compliance(video_id)
-    outcome.compliance = compliance
-
-    if not compliance.passed:
-        compliance_logger.error(compliance.summary)
-        if COMPLIANCE_DELETE_ON_FAIL:
-            try:
-                yt.delete_video(video_id)
-                compliance_logger.info(f"Deleted failed video {video_id} from YouTube.")
-            except Exception as exc:
-                outcome.errors.append(f"Failed to delete video after rejection: {exc}")
-        return outcome
 
     # ------------------------------------------------------------------ #
     # Step 3: Publish on YouTube
     # ------------------------------------------------------------------ #
-    if "youtube" in request.platforms:
+    if "youtube" in request.platforms and not yt_done_from_resume:
         try:
             if request.schedule:
                 yt.schedule_publish(video_id, request.schedule)
@@ -169,15 +272,88 @@ def run_review(request: ReviewRequest) -> ReviewOutcome:
         except Exception as exc:
             outcome.errors.append(f"YouTube publish failed: {exc}")
 
+        if request.youtube_playlist_id and outcome.youtube_published:
+            try:
+                yt.add_to_playlist(video_id, request.youtube_playlist_id)
+            except Exception as exc:
+                # non-fatal: video is already published
+                compliance_logger.warning(f"Playlist append failed: {exc}")
+
+        if request.cover_path and outcome.youtube_published:
+            try:
+                yt.set_thumbnail(video_id, request.cover_path)
+            except Exception as exc:
+                # non-fatal — YouTube may reject custom thumbs on unverified channels
+                compliance_logger.warning(f"Thumbnail upload failed: {exc}")
+
+    # ------------------------------------------------------------------ #
+    # Step 3b: Shorts companion (private → public, reuses compliance verdict)
+    # ------------------------------------------------------------------ #
+    if request.shorts_variant_file and outcome.youtube_published and not shorts_done_from_resume:
+        try:
+            shorts_title = _ensure_shorts_in_title(request.title)
+            shorts_desc = _ensure_shorts_in_desc(description)
+
+            shorts_video_id = yt.upload_private(
+                file_path=request.shorts_variant_file,
+                title=shorts_title[:100],
+                description=shorts_desc,
+                tags=request.tags,
+                category_id=request.category_id,
+                made_for_kids=request.made_for_kids,
+                contains_synthetic_media=request.contains_synthetic_media,
+            )
+            outcome.shorts_video_id = shorts_video_id
+
+            if request.schedule:
+                yt.schedule_publish(shorts_video_id, request.schedule)
+            else:
+                yt.make_public(shorts_video_id)
+            outcome.shorts_published = True
+
+            shorts_playlist = request.shorts_playlist_id or request.youtube_playlist_id
+            if shorts_playlist:
+                try:
+                    yt.add_to_playlist(shorts_video_id, shorts_playlist)
+                except Exception as exc:
+                    compliance_logger.warning(f"Shorts playlist append failed: {exc}")
+
+            if request.cover_path:
+                try:
+                    yt.set_thumbnail(shorts_video_id, request.cover_path)
+                except Exception as exc:
+                    compliance_logger.warning(f"Shorts thumbnail upload failed: {exc}")
+        except Exception as exc:
+            # non-fatal — the long-form video is already up
+            outcome.errors.append(f"Shorts companion upload failed: {exc}")
+
     # ------------------------------------------------------------------ #
     # Step 4: Publish on TikTok
     # ------------------------------------------------------------------ #
-    if "tiktok" in request.platforms:
+    if "tiktok" in request.platforms and not tt_done_from_resume:
         if not request.tiktok_account:
             outcome.errors.append("tiktok_account required but not provided.")
         else:
             try:
                 from uploader.tk_uploader.tk_api import TikTokAPI
+
+                tk_source = request.video_file
+                if request.tiktok_prep:
+                    try:
+                        from uploader.tt_prep import prepare_for_tiktok
+
+                        prep = prepare_for_tiktok(
+                            src=request.video_file,
+                            mirror=request.tiktok_mirror,
+                        )
+                        tk_source = prep.output
+                        compliance_logger.info(
+                            f"TikTok will upload the prepped variant: {tk_source.name}"
+                        )
+                    except RuntimeError as exc:
+                        compliance_logger.warning(
+                            f"TikTok prep failed, falling back to original file: {exc}"
+                        )
 
                 tk = TikTokAPI(request.tiktok_account)
                 tk.authenticate()
@@ -202,8 +378,8 @@ def run_review(request: ReviewRequest) -> ReviewOutcome:
                     )
 
                 publish_id = tk.upload_video(
-                    file_path=request.video_file,
-                    title=request.title,
+                    file_path=tk_source,
+                    title=_compose_tiktok_caption(request.title, request.tt_tags),
                     privacy_level=privacy,
                 )
                 outcome.tiktok_publish_id = publish_id
@@ -222,6 +398,30 @@ def run_review(request: ReviewRequest) -> ReviewOutcome:
 
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".webm"}
 YOUTUBE_DAILY_UPLOAD_BUDGET = 6
+TIKTOK_CAPTION_LIMIT = 2200
+
+
+def _compose_tiktok_caption(title: str, tags: list[str]) -> str:
+    """Attach hashtags to the TikTok caption. Caps at TikTok's 2200-char limit."""
+    tag_str = " ".join(f"#{t.lstrip('#')}" for t in tags if t)
+    caption = f"{title}\n\n{tag_str}".strip() if tag_str else title
+    return caption[:TIKTOK_CAPTION_LIMIT]
+
+
+@dataclass
+class PublishPolicy:
+    """Per-account rate limits for a single batch run.
+
+    YouTube's Data API quota is 10k units/day; each insert costs 1600 units,
+    so ~6 uploads/day is the hard ceiling. TikTok has no public quota but
+    treats bursts as spam signals. Minimum interval keeps consecutive
+    submissions from looking machine-timed.
+    """
+
+    yt_per_day: int = 3
+    tt_per_day: int = 5
+    min_interval_seconds: int = 90
+    hard_yt_daily_max: int = YOUTUBE_DAILY_UPLOAD_BUDGET
 
 
 def _title_from_sidecar(video: Path) -> tuple[str, str, list[str]]:
@@ -264,12 +464,73 @@ def plan_batch_schedule(
 
 def list_videos_in_dir(directory: Path) -> list[Path]:
     files = [
-        p for p in sorted(directory.iterdir())
+        p for p in directory.iterdir()
         if p.is_file() and p.suffix.lower() in VIDEO_SUFFIXES
     ]
     if not files:
         raise FileNotFoundError(f"No video files found in {directory}")
+
+    # Sort by parsed episode number so ep_02.mp4 comes before ep_10.mp4.
+    # Files without a parseable ep number go last, ordered by name for stability.
+    def _sort_key(p: Path) -> tuple[int, int | str]:
+        ep = extract_ep_number(p)
+        if ep is None:
+            return (1, p.name)
+        return (0, ep)
+
+    files.sort(key=_sort_key)
     return files
+
+
+def _prepare_shorts(video: Path, series) -> Path | None:
+    """Slice a Shorts companion if series.shorts_cut_seconds > 0 and source is long enough.
+
+    Returns the shorts file path or None (source already short / feature disabled / error).
+    """
+    cut = getattr(series, "shorts_cut_seconds", 0) or 0
+    if cut <= 0:
+        return None
+    try:
+        from uploader.split import split_shorts
+
+        result = split_shorts(video, duration=cut)
+        return result.output if result.performed else None
+    except (RuntimeError, ValueError) as exc:
+        compliance_logger.warning(f"Shorts split failed for {video.name}: {exc}")
+        return None
+
+
+def _prepare_cover(video: Path, series, episode_meta, auto: bool) -> Path | None:
+    """Locate or generate a cover jpg for `video`. Returns None when unavailable.
+
+    Priority: hand-crafted <stem>_cover.jpg beats auto-generation. If none exists
+    and auto=True + series is active + filename has an ep number, generate one.
+    Uses episode_meta.theme as the cover's main line when available.
+    """
+    from uploader.cover import CoverSpec, default_cover_path, make_cover
+
+    manual = default_cover_path(video)
+    if manual.exists():
+        return manual
+    if not auto or not series.is_active():
+        return None
+    ep = extract_ep_number(video)
+    if ep is None:
+        return None
+    theme = episode_meta.theme if episode_meta and episode_meta.theme else ""
+    try:
+        return make_cover(
+            video,
+            CoverSpec(
+                ep=ep,
+                series_name=series.name,
+                theme=theme,
+                total_eps=series.total_eps,
+            ),
+        )
+    except RuntimeError as exc:
+        compliance_logger.warning(f"Cover generation failed for {video.name}: {exc}")
+        return None
 
 
 def run_batch_review(
@@ -283,23 +544,58 @@ def run_batch_review(
     shorts: bool = False,
     dry_run: bool = False,
     tiktok_pause_seconds: int = 90,
+    tiktok_prep: bool = True,
+    tiktok_mirror: bool = False,
+    policy: PublishPolicy | None = None,
+    auto_cover: bool = True,
 ) -> list[ReviewOutcome]:
     """Review each video, then schedule YouTube public times so posts are staggered."""
     platforms = platforms or ["youtube"]
-    videos = list_videos_in_dir(directory)
-    if len(videos) > YOUTUBE_DAILY_UPLOAD_BUDGET:
+    policy = policy or PublishPolicy()
+
+    videos = list_videos_in_dir(directory)  # raises FileNotFoundError on empty
+    series = load_series(directory)
+    episodes = load_episodes(directory)
+
+    yt_uploads_per_ep = 2 if (series.shorts_cut_seconds > 0 and "youtube" in platforms) else 1
+    quota_used = len(videos) * yt_uploads_per_ep
+    if quota_used > policy.hard_yt_daily_max:
         raise RuntimeError(
-            f"Found {len(videos)} videos, but YouTube API quota allows about "
-            f"{YOUTUBE_DAILY_UPLOAD_BUDGET} uploads per day. Split the folder or run again tomorrow."
+            f"Found {len(videos)} videos × {yt_uploads_per_ep} YT uploads = {quota_used} inserts, "
+            f"but YouTube API quota allows about {policy.hard_yt_daily_max}/day. "
+            f"Split the folder or disable shorts_cut_seconds."
         )
+    if "youtube" in platforms and per_day > policy.yt_per_day:
+        compliance_logger.warning(
+            f"--per-day {per_day} exceeds YouTube pacing limit "
+            f"({policy.yt_per_day}/day). Bursts of public posts trigger spam signals."
+        )
+    if "tiktok" in platforms and len(videos) > policy.tt_per_day:
+        compliance_logger.warning(
+            f"{len(videos)} TikTok posts in one batch exceeds "
+            f"{policy.tt_per_day}/day; expect distribution throttling."
+        )
+
+    if series.is_active():
+        print(f"Series: {series.name} (total {series.total_eps or '?'} eps)")
+        if series.youtube_playlist_id:
+            print(f"  → episodes will be appended to YouTube playlist {series.youtube_playlist_id}")
+    if episodes:
+        print(f"Loaded episodes.yaml with {len(episodes)} entries.")
+    if series.shorts_cut_seconds > 0 and "youtube" in platforms:
+        print(f"Shorts companion enabled: sources > {series.shorts_cut_seconds}s will also upload a "
+              f"<stem>_short.mp4 clip. YT quota usage doubles.")
 
     planned = plan_batch_schedule(videos, per_day=per_day, daily_hours=daily_hours, start_days=start_days)
 
     print("Batch schedule (YouTube goes public at these local times):")
     print("-" * 60)
     for video, when in planned:
-        title, _, _ = _title_from_sidecar(video)
-        print(f"  {when.strftime('%Y-%m-%d %H:%M')}  {video.name}  ({title})")
+        hook, _, _ = _title_from_sidecar(video)
+        ep = extract_ep_number(video)
+        meta = episodes.get(ep) if ep is not None else None
+        display_title, _, _, _ = render_for_video(video, hook, "", [], series, meta)
+        print(f"  {when.strftime('%Y-%m-%d %H:%M')}  {video.name}  ({display_title})")
     print("-" * 60)
     print(f"Pace: {per_day}/day. API uploads happen now; public time is delayed.")
     if "tiktok" in platforms:
@@ -311,32 +607,86 @@ def run_batch_review(
         return []
 
     outcomes: list[ReviewOutcome] = []
-    tiktok_count = 0
     for index, (video, when) in enumerate(planned):
-        title, desc, tags = _title_from_sidecar(video)
+        submit_started = time.monotonic()
+        hook, sc_desc, sc_tags = _title_from_sidecar(video)
+        ep = extract_ep_number(video)
+        meta = episodes.get(ep) if ep is not None else None
+        title, desc, tags, tt_tags = render_for_video(video, hook, sc_desc, sc_tags, series, meta)
+        cover = _prepare_cover(video, series, meta, auto_cover) if "youtube" in platforms else None
+        shorts_variant = _prepare_shorts(video, series) if "youtube" in platforms else None
+
+        prior_state = manifest_get_state(directory, ep) if ep is not None else None
+        want_shorts = shorts_variant is not None
+        want_tt = "tiktok" in platforms
+        prior_label = prior_state.status_label(want_shorts, want_tt) if prior_state else "unknown"
+        if prior_state and prior_label == "done":
+            print(f"[{index + 1}/{len(planned)}] {video.name} → manifest says DONE; skipping.")
+            outcome = ReviewOutcome(
+                youtube_published=True,
+                shorts_published=prior_state.is_shorts_done(),
+                shorts_video_id=prior_state.shorts_video_id,
+                tiktok_published=prior_state.is_tt_done(),
+                tiktok_publish_id=prior_state.tt_publish_id,
+                scheduled_at=when,
+            )
+            outcomes.append(outcome)
+            continue
+
+        if prior_state and prior_label == "partial":
+            print(f"[{index + 1}/{len(planned)}] {video.name} → manifest says PARTIAL; resuming.")
+
         request = ReviewRequest(
             video_file=video,
             title=title,
             description=desc,
             tags=tags,
+            tt_tags=tt_tags,
             youtube_account=youtube_account,
             tiktok_account=tiktok_account,
             platforms=platforms,
             schedule=when,
             shorts=shorts,
+            tiktok_prep=tiktok_prep,
+            tiktok_mirror=tiktok_mirror,
+            youtube_playlist_id=series.youtube_playlist_id,
+            cover_path=cover,
+            shorts_variant_file=shorts_variant,
+            shorts_playlist_id=series.shorts_playlist_id,
+            resume_state=prior_state,
         )
         print(f"[{index + 1}/{len(planned)}] {video.name} -> {when.strftime('%Y-%m-%d %H:%M')}")
         outcome = run_review(request)
         outcome.print_report()
         outcomes.append(outcome)
 
-        if "tiktok" in platforms and outcome.tiktok_published:
-            tiktok_count += 1
-            if index < len(planned) - 1:
-                print(f"Waiting {tiktok_pause_seconds}s before the next TikTok upload …")
-                time.sleep(tiktok_pause_seconds)
-        elif index < len(planned) - 1:
-            time.sleep(3)
+        if ep is not None:
+            state = EpisodeState(
+                batch_dir=str(directory.expanduser().resolve()),
+                ep=ep,
+                source_file=video.name,
+                preflight_ok=(None if outcome.preflight is None
+                              else (not outcome.preflight.blocked)),
+                yt_video_id=(outcome.compliance.video_id if outcome.compliance else ""),
+                yt_published=outcome.youtube_published,
+                yt_scheduled_at=(outcome.scheduled_at.isoformat() if outcome.scheduled_at else ""),
+                shorts_video_id=outcome.shorts_video_id,
+                shorts_published=outcome.shorts_published,
+                tt_publish_id=outcome.tiktok_publish_id,
+                tt_published=outcome.tiktok_published,
+                last_error=" | ".join(outcome.errors),
+            )
+            try:
+                manifest_upsert(state)
+            except Exception as exc:
+                compliance_logger.warning(f"Manifest write failed for ep {ep}: {exc}")
+
+        if index < len(planned) - 1:
+            elapsed = time.monotonic() - submit_started
+            wait = max(0, policy.min_interval_seconds - int(elapsed))
+            if wait > 0:
+                print(f"Pacing: sleeping {wait}s (min interval {policy.min_interval_seconds}s) before next submit …")
+                time.sleep(wait)
 
     passed = sum(1 for o in outcomes if o.compliance and o.compliance.passed)
     print(f"Batch finished: {passed}/{len(outcomes)} passed YouTube compliance.")

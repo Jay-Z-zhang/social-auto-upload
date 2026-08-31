@@ -291,3 +291,28 @@ class YouTubeAPI:
         """Delete a video (e.g. after a failed compliance check)."""
         self.service.videos().delete(id=video_id).execute()
         youtube_logger.info(f"Video {video_id} deleted.")
+
+    def add_to_playlist(self, video_id: str, playlist_id: str) -> str:
+        """Append `video_id` to `playlist_id`. Returns the playlistItem ID."""
+        resp = self.service.playlistItems().insert(
+            part="snippet",
+            body={
+                "snippet": {
+                    "playlistId": playlist_id,
+                    "resourceId": {"kind": "youtube#video", "videoId": video_id},
+                }
+            },
+        ).execute()
+        item_id = resp.get("id", "")
+        youtube_logger.success(f"Video {video_id} added to playlist {playlist_id}.")
+        return item_id
+
+    def set_thumbnail(self, video_id: str, image_path: str | Path) -> None:
+        """Upload a custom thumbnail for `video_id`. JPG/PNG, < 2MB, ideally 1280x720."""
+        image_path = Path(image_path)
+        if not image_path.exists():
+            raise FileNotFoundError(f"Thumbnail not found: {image_path}")
+        mime = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
+        media = MediaFileUpload(str(image_path), mimetype=mime, resumable=False)
+        self.service.thumbnails().set(videoId=video_id, media_body=media).execute()
+        youtube_logger.success(f"Thumbnail set for {video_id} from {image_path.name}.")

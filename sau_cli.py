@@ -1060,6 +1060,9 @@ def build_parser() -> argparse.ArgumentParser:
     review_parser.add_argument("--made-for-kids", action="store_true", help="Declare video as made for kids")
     review_parser.add_argument("--synthetic-media", action="store_true", help="Declare video contains AI-generated/synthetic content")
     review_parser.add_argument("--shorts", action="store_true", help="Treat as YouTube Short: append #Shorts to title/description")
+    review_parser.add_argument("--no-tiktok-prep", action="store_true", help="Skip TikTok anti-repost preprocessing (upload original file to TikTok too).")
+    review_parser.add_argument("--tiktok-mirror", action="store_true", help="Horizontally flip the TikTok variant (strong dedupe signal — check text/logos first).")
+    review_parser.add_argument("--force-fresh", action="store_true", help="Ignore manifest and re-upload even if this episode is already recorded.")
 
     batch_parser = platform_parsers.add_parser(
         "review-batch",
@@ -1079,24 +1082,327 @@ def build_parser() -> argparse.ArgumentParser:
     )
     batch_parser.add_argument("--start-days", type=int, default=1, help="Start after N days (default: 1 = tomorrow)")
     batch_parser.add_argument("--shorts", action="store_true", help="Treat as YouTube Shorts: append #Shorts")
+    batch_parser.add_argument("--no-tiktok-prep", action="store_true", help="Skip TikTok anti-repost preprocessing.")
+    batch_parser.add_argument("--tiktok-mirror", action="store_true", help="Horizontally flip TikTok variants.")
+    batch_parser.add_argument("--no-auto-cover", action="store_true", help="Skip auto-generated YouTube covers (only use hand-crafted <stem>_cover.jpg).")
+    batch_parser.add_argument("--min-interval", type=int, default=90, help="Minimum seconds between consecutive submits (default 90).")
+    batch_parser.add_argument("--yt-per-day-max", type=int, default=3, help="Warn if per-day exceeds this (default 3; hard ceiling 6 from YT quota).")
+    batch_parser.add_argument("--tt-per-day-max", type=int, default=5, help="Warn if batch size exceeds this for TikTok (default 5).")
     batch_parser.add_argument("--dry-run", action="store_true", help="Print the schedule only, do not upload")
+
+    preflight_parser = platform_parsers.add_parser(
+        "preflight-audio",
+        help="Fingerprint audio and check AcoustID for copyright matches (no upload).",
+    )
+    preflight_parser.add_argument("--file", required=True, type=existing_file_path, help="Video file path")
+    preflight_parser.add_argument(
+        "--min-score", type=float, default=None,
+        help="Override PREFLIGHT_MIN_SCORE from conf.py (0..1).",
+    )
+    preflight_parser.add_argument(
+        "--no-block", action="store_true",
+        help="Report matches but exit 0 (default: exit 2 on match).",
+    )
+
+    prep_parser = platform_parsers.add_parser(
+        "prep-tiktok",
+        help="Generate a TikTok-specific variant (metadata stripped, reencoded, micro-cropped).",
+    )
+    prep_parser.add_argument("--file", required=True, type=existing_file_path, help="Source video path")
+    prep_parser.add_argument(
+        "--out", type=Path, default=None,
+        help="Output file path (default: <file_dir>/tiktok/<name>_tt.mp4)",
+    )
+    prep_parser.add_argument("--crf", type=int, default=23, help="x264 CRF (18-28; higher = smaller file). Default 23.")
+    prep_parser.add_argument("--mirror", action="store_true", help="Horizontal flip (strong dedupe signal; check text/logos first).")
+    prep_parser.add_argument("--crop-px", type=int, default=4, help="Pixels cropped from each edge before rescale. Default 4.")
+    prep_parser.add_argument("--overwrite", action="store_true", help="Overwrite existing output.")
+
+    cover_parser = platform_parsers.add_parser(
+        "make-cover",
+        help="Generate a 1280x720 YouTube cover with EP number + series name overlay.",
+    )
+    cover_parser.add_argument("--file", required=True, type=existing_file_path, help="Source video path")
+    cover_parser.add_argument("--ep", type=int, default=None, help="Episode number (auto-parsed from filename if omitted).")
+    cover_parser.add_argument("--series-name", default="", help="Series name to overlay (small text).")
+    cover_parser.add_argument("--frame-at", type=float, default=0.35, help="Where in the clip to sample (0..1). Default 0.35.")
+    cover_parser.add_argument("--font", default="", help="TTF/OTF font path (default: Impact/Arial Black/Helvetica).")
+    cover_parser.add_argument("--out", type=Path, default=None, help="Output path (default: <name>_cover.jpg next to source).")
+    cover_parser.add_argument("--overwrite", action="store_true", help="Overwrite existing cover.")
+
+    list_eps_parser = platform_parsers.add_parser(
+        "list-eps",
+        help="Dry-run: list files in a folder and their parsed episode numbers.",
+    )
+    list_eps_parser.add_argument("--dir", required=True, type=existing_dir_path, help="Folder of video files")
+
+    split_parser = platform_parsers.add_parser(
+        "split-shorts",
+        help="Slice the first N seconds of a video into a YouTube-Shorts-compatible variant.",
+    )
+    split_parser.add_argument("--file", required=True, type=existing_file_path, help="Source video path")
+    split_parser.add_argument("--duration", type=int, default=59, help="Target duration in seconds (15-60). Default 59.")
+    split_parser.add_argument("--out", type=Path, default=None, help="Output path (default: <stem>_short.mp4).")
+    split_parser.add_argument("--overwrite", action="store_true", help="Overwrite existing output.")
+
+    status_parser = platform_parsers.add_parser(
+        "status",
+        help="Show upload manifest for a batch directory (what's live, what's pending, what errored).",
+    )
+    status_parser.add_argument("--dir", required=True, type=Path, help="Batch directory (need not exist when using --reset*)")
+    status_parser.add_argument("--reset", type=int, metavar="EP", help="Delete manifest row for this ep (forces re-upload next batch run).")
+    status_parser.add_argument("--reset-all", action="store_true", help="Delete every manifest row for this dir. Prompts for confirmation.")
+
+    genmeta_parser = platform_parsers.add_parser(
+        "gen-metadata",
+        help="Use DeepSeek to draft episodes.yaml (theme/hook/description/tags per episode).",
+    )
+    genmeta_parser.add_argument("--dir", required=True, type=existing_dir_path, help="Folder containing series.yaml")
+    genmeta_parser.add_argument(
+        "--episodes", default="",
+        help="Comma-separated ep numbers or ranges (e.g. 1-10,15). Default: everything missing from episodes.yaml.",
+    )
+    genmeta_parser.add_argument("--overwrite", action="store_true", help="Regenerate even for episodes that already have entries.")
+    genmeta_parser.add_argument("--dry-run", action="store_true", help="Print the JSON and exit without writing episodes.yaml.")
 
     return parser
 
 
 async def dispatch(args: argparse.Namespace) -> int:
+    if args.platform == "preflight-audio":
+        from uploader.preflight import run_preflight
+
+        result = run_preflight(
+            args.file,
+            min_score=args.min_score,
+            block_on_match=not args.no_block,
+        )
+        print(result.summary())
+        if not result.ran:
+            return 1
+        if result.blocked:
+            return 2
+        return 0
+
+    if args.platform == "prep-tiktok":
+        from uploader.tt_prep import prepare_for_tiktok
+
+        try:
+            r = prepare_for_tiktok(
+                src=args.file,
+                out=args.out,
+                crf=args.crf,
+                mirror=args.mirror,
+                crop_px=args.crop_px,
+                overwrite=args.overwrite,
+            )
+        except RuntimeError as exc:
+            print(f"prep-tiktok failed: {exc}")
+            return 1
+        print(f"Wrote {r.output} (crf={r.crf}, mirror={r.mirrored})")
+        return 0
+
+    if args.platform == "gen-metadata":
+        from uploader.genmeta import generate_metadata
+
+        eps: list[int] | None = None
+        if args.episodes:
+            eps = []
+            for token in args.episodes.split(","):
+                token = token.strip()
+                if not token:
+                    continue
+                if "-" in token:
+                    lo, hi = token.split("-", 1)
+                    eps.extend(range(int(lo), int(hi) + 1))
+                else:
+                    eps.append(int(token))
+        try:
+            result = generate_metadata(
+                directory=args.dir,
+                episode_range=eps,
+                dry_run=args.dry_run,
+                overwrite=args.overwrite,
+            )
+        except RuntimeError as exc:
+            print(f"gen-metadata failed: {exc}")
+            return 1
+        if result.written_path:
+            print(f"Wrote {result.written_path} ({result.total_generated} new + {result.merged_with_existing} kept)")
+        elif args.dry_run:
+            print(f"Dry run: {result.total_generated} episodes would be written.")
+        else:
+            print("No new episodes generated.")
+        return 0
+
+    if args.platform == "status":
+        from uploader.manifest import forget, list_states, summary
+
+        if args.reset is not None:
+            n = forget(args.dir, args.reset)
+            print(f"Cleared {n} row(s) for ep {args.reset} in {args.dir}.")
+            return 0
+        if args.reset_all:
+            resp = input(f"Really clear ALL manifest rows for {args.dir}? [y/N] ").strip().lower()
+            if resp != "y":
+                print("Aborted.")
+                return 1
+            n = forget(args.dir)
+            print(f"Cleared {n} row(s).")
+            return 0
+
+        if not args.dir.is_dir():
+            print(f"[warn] {args.dir} does not exist on disk. Reading manifest anyway.", file=sys.stderr)
+        states = list_states(args.dir)
+        if not states:
+            print(f"No manifest entries yet for {args.dir}.")
+            return 0
+        # Detect "shorts wanted" and "tt wanted" retrospectively per row.
+        # A previously-attempted-but-failed target leaves a marker in last_error.
+        def _wanted(s, key: str, other: str) -> bool:
+            return bool(other) or (key.lower() in (s.last_error or "").lower())
+        print(f"{'EP':>4}  {'STATUS':<8}  {'YT VIDEO':<12}  {'SHORTS':<12}  {'TIKTOK':<15}  UPDATED")
+        print("-" * 88)
+        for s in states:
+            want_shorts = _wanted(s, "shorts", s.shorts_video_id)
+            want_tt = _wanted(s, "tiktok", s.tt_publish_id)
+            label = s.status_label(want_shorts, want_tt)
+            yt = s.yt_video_id or "-"
+            sh = s.shorts_video_id or ("-" if not want_shorts else "…")
+            tt = s.tt_publish_id or ("-" if not want_tt else "…")
+            print(f"{s.ep:>4}  {label:<8}  {yt:<12}  {sh:<12}  {tt:<15}  {s.updated_at}")
+            if s.last_error:
+                print(f"      ↳ {s.last_error}")
+        print("-" * 88)
+        counts = summary(args.dir)
+        print(f"Total {counts['total']}: done={counts['done']} partial={counts['partial']} pending={counts['pending']} error={counts['error']}")
+        return 0
+
+    if args.platform == "split-shorts":
+        from uploader.split import split_shorts
+
+        try:
+            r = split_shorts(
+                src=args.file,
+                duration=args.duration,
+                out=args.out,
+                overwrite=args.overwrite,
+            )
+        except (RuntimeError, ValueError) as exc:
+            print(f"split-shorts failed: {exc}")
+            return 1
+        if not r.performed:
+            print(f"Source is already {r.source_duration_seconds:.1f}s; nothing to do.")
+            return 3
+        print(f"Wrote {r.output} ({r.duration_seconds}s of {r.source_duration_seconds:.1f}s)")
+        return 0
+
+    if args.platform == "list-eps":
+        from uploader.compliance import list_videos_in_dir
+        from uploader.series import extract_ep_number, load_series
+
+        series = load_series(args.dir)
+        try:
+            videos = list_videos_in_dir(args.dir)
+        except FileNotFoundError as exc:
+            print(exc)
+            return 1
+        if series.is_active():
+            print(f"Series: {series.name} (total_eps={series.total_eps or '?'})")
+        else:
+            print("No series.yaml in this folder.")
+        print("-" * 60)
+        parsed = 0
+        for v in videos:
+            ep = extract_ep_number(v)
+            marker = f"EP{ep:02d}" if ep is not None else "  ??"
+            print(f"  [{marker}]  {v.name}")
+            if ep is not None:
+                parsed += 1
+        print("-" * 60)
+        print(f"{parsed}/{len(videos)} files have parseable episode numbers.")
+        return 0 if parsed == len(videos) else 1
+
+    if args.platform == "make-cover":
+        from uploader.cover import CoverSpec, make_cover
+        from uploader.series import extract_ep_number
+
+        ep = args.ep if args.ep is not None else extract_ep_number(args.file)
+        if ep is None:
+            print("Could not parse episode number from filename. Pass --ep.")
+            return 1
+        try:
+            out = make_cover(
+                src=args.file,
+                spec=CoverSpec(
+                    ep=ep,
+                    series_name=args.series_name,
+                    frame_at=args.frame_at,
+                    font_path=args.font,
+                ),
+                out=args.out,
+                overwrite=args.overwrite,
+            )
+        except RuntimeError as exc:
+            print(f"make-cover failed: {exc}")
+            return 1
+        print(f"Wrote {out}")
+        return 0
+
     if args.platform == "review":
-        from uploader.compliance import ReviewRequest, run_review
+        from uploader.compliance import (
+            EpisodeState, ReviewRequest, _prepare_cover, _prepare_shorts,
+            manifest_get_state, manifest_upsert, run_review,
+        )
+        from uploader.episodes import load_episodes
+        from uploader.series import extract_ep_number, load_series, render_for_video
 
         platforms = [p.strip().lower() for p in args.platforms.split(",") if p.strip()]
         if "tiktok" in platforms and not args.tiktok_account:
             raise RuntimeError("--tiktok-account is required when --platforms includes tiktok")
 
+        video = args.file
+        directory = video.parent
+        series = load_series(directory)
+        episodes = load_episodes(directory) if series.is_active() else {}
+        ep = extract_ep_number(video) if series.is_active() else None
+        meta = episodes.get(ep) if ep is not None else None
+
+        # When a series.yaml is present, prefer the templated title/desc/tags
+        # over the flags. Flags still win when no series is loaded — the
+        # single-file "smoke test" use case stays intact.
+        if series.is_active() and ep is not None:
+            hook = args.title if args.title else ""
+            title, description, tags, tt_tags = render_for_video(
+                video, hook, args.desc, parse_tags(args.tags), series, meta,
+            )
+            cover_path = _prepare_cover(video, series, meta, auto=True) if "youtube" in platforms else None
+            shorts_variant = _prepare_shorts(video, series) if "youtube" in platforms else None
+            resume_state = None
+            if not args.force_fresh:
+                prior = manifest_get_state(directory, ep)
+                if prior.updated_at:
+                    resume_state = prior
+                    print(f"Manifest already knows this episode (status={prior.status_label(bool(shorts_variant), 'tiktok' in platforms)}); resuming.")
+            playlist_id = series.youtube_playlist_id
+            shorts_playlist_id = series.shorts_playlist_id
+        else:
+            title = args.title
+            description = args.desc
+            tags = parse_tags(args.tags)
+            tt_tags = tags[:3]
+            cover_path = None
+            shorts_variant = None
+            resume_state = None
+            playlist_id = ""
+            shorts_playlist_id = ""
+
         request = ReviewRequest(
-            video_file=args.file,
-            title=args.title,
-            description=args.desc,
-            tags=parse_tags(args.tags),
+            video_file=video,
+            title=title,
+            description=description,
+            tags=tags,
+            tt_tags=tt_tags,
             youtube_account=args.youtube_account,
             tiktok_account=args.tiktok_account,
             platforms=platforms,
@@ -1105,6 +1411,13 @@ async def dispatch(args: argparse.Namespace) -> int:
             made_for_kids=args.made_for_kids,
             contains_synthetic_media=args.synthetic_media,
             shorts=getattr(args, "shorts", False),
+            tiktok_prep=not getattr(args, "no_tiktok_prep", False),
+            tiktok_mirror=getattr(args, "tiktok_mirror", False),
+            youtube_playlist_id=playlist_id,
+            cover_path=cover_path,
+            shorts_variant_file=shorts_variant,
+            shorts_playlist_id=shorts_playlist_id,
+            resume_state=resume_state,
         )
 
         print(f"Starting compliance review for: {request.video_file.name}")
@@ -1113,6 +1426,27 @@ async def dispatch(args: argparse.Namespace) -> int:
 
         outcome = run_review(request)
         outcome.print_report()
+
+        # If this run went through the series-aware path, persist state so a
+        # future batch run can skip / resume this episode.
+        if series.is_active() and ep is not None:
+            try:
+                manifest_upsert(EpisodeState(
+                    batch_dir=str(directory.expanduser().resolve()),
+                    ep=ep,
+                    source_file=video.name,
+                    preflight_ok=(None if outcome.preflight is None else (not outcome.preflight.blocked)),
+                    yt_video_id=(outcome.compliance.video_id if outcome.compliance else ""),
+                    yt_published=outcome.youtube_published,
+                    yt_scheduled_at=(outcome.scheduled_at.isoformat() if outcome.scheduled_at else ""),
+                    shorts_video_id=outcome.shorts_video_id,
+                    shorts_published=outcome.shorts_published,
+                    tt_publish_id=outcome.tiktok_publish_id,
+                    tt_published=outcome.tiktok_published,
+                    last_error=" | ".join(outcome.errors),
+                ))
+            except Exception as exc:
+                print(f"[warn] manifest write failed: {exc}", file=sys.stderr)
 
         if outcome.success:
             print("All done. Content passed review and was published successfully.")
@@ -1131,7 +1465,7 @@ async def dispatch(args: argparse.Namespace) -> int:
             return 1
 
     if args.platform == "review-batch":
-        from uploader.compliance import run_batch_review
+        from uploader.compliance import PublishPolicy, run_batch_review
 
         platforms = [p.strip().lower() for p in args.platforms.split(",") if p.strip()]
         if "tiktok" in platforms and not args.tiktok_account:
@@ -1155,6 +1489,14 @@ async def dispatch(args: argparse.Namespace) -> int:
             start_days=args.start_days,
             shorts=args.shorts,
             dry_run=args.dry_run,
+            tiktok_prep=not args.no_tiktok_prep,
+            tiktok_mirror=args.tiktok_mirror,
+            policy=PublishPolicy(
+                yt_per_day=args.yt_per_day_max,
+                tt_per_day=args.tt_per_day_max,
+                min_interval_seconds=args.min_interval,
+            ),
+            auto_cover=not args.no_auto_cover,
         )
         if args.dry_run:
             return 0
