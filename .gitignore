@@ -180,6 +180,16 @@ videos/**/*_cover.jpg
 videos/**/tiktok/
 videos/dramaTest/
 
+# 版权安全：剧集元数据（剧名/资源ID/剧情）不进 git —— 公开 repo 里的搬运痕迹
+# 本地一次性运维脚本（含本机绝对路径）也不上传
+videos/100005978_dilf_uncle/
+_*.py
+tk_publish.py
+
+# 云端监控的 watchlist（含频道视频 ID 清单，随 repo 可见性决定是否提交）
+watchlist.json
+monitor_result.json
+
 # Claude Code / editor local config
 .claude/
 
@@ -200,5 +210,11 @@ cookiesFile
 uploadFile
 videoFile
 .tmp-ui-*/
+
+# 本机二进制工具（ffmpeg/fpcalc）
+tools/
+
+# 浏览器内核（PLAYWRIGHT_BROWSERS_PATH 指向的目录）
+browsers/
 
 /uploader/bilibili_uploader/qrcode.png

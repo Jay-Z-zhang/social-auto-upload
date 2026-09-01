@@ -1,0 +1,109 @@
+name: YouTube Copyright Monitor
+
+on:
+  schedule:
+    # 每 30 分钟运行一次（GitHub schedule 有几分钟抖动，属正常）
+    - cron: '*/30 * * * *'
+  workflow_dispatch:  # 允许手动触发
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install minimal dependencies
+      # 只装监控所需的包，不装 playwright / 浏览器等上传链路依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib loguru requests
+
+    - name: Restore credentials from Secrets
+      env:
+        YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
+        YOUTUBE_OAUTH_TOKEN_JSON: ${{ secrets.YOUTUBE_OAUTH_TOKEN_JSON }}
+        YOUTUBE_WATCHLIST_JSON: ${{ secrets.YOUTUBE_WATCHLIST_JSON }}
+      run: |
+        # 最小 conf.py：只提供 BASE_DIR。
+        # 真实 conf.py（含 API key）被 .gitignore 排除，绝不进 repo；
+        # DeepSeek key 走环境变量，监控脚本优先读 env。
+        cat > conf.py <<'EOF'
+        from pathlib import Path
+        BASE_DIR = Path(__file__).parent.resolve()
+        EOF
+
+        if [ -z "$YOUTUBE_CLIENT_SECRET_JSON" ]; then
+          echo "ERROR: secret YOUTUBE_CLIENT_SECRET_JSON not set"; exit 1
+        fi
+        printf '%s' "$YOUTUBE_CLIENT_SECRET_JSON" > client_secret.json
+
+        if [ -z "$YOUTUBE_OAUTH_TOKEN_JSON" ]; then
+          echo "ERROR: secret YOUTUBE_OAUTH_TOKEN_JSON not set"; exit 1
+        fi
+        mkdir -p cookies
+        printf '%s' "$YOUTUBE_OAUTH_TOKEN_JSON" > cookies/youtube_oauth_jayz.json
+
+        if [ -z "$YOUTUBE_WATCHLIST_JSON" ]; then
+          echo "ERROR: secret YOUTUBE_WATCHLIST_JSON not set"; exit 1
+        fi
+        printf '%s' "$YOUTUBE_WATCHLIST_JSON" > watchlist.json
+
+    - name: Run copyright monitor
+      env:
+        DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      run: |
+        python yt_copyright_monitor.py \
+          --watchlist watchlist.json \
+          --account jayz \
+          --json-output monitor_result.json
+        echo "MONITOR_EXIT=$?" >> "$GITHUB_ENV"
+
+    - name: Create issue on copyright problems
+      if: always()
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        if [ ! -f monitor_result.json ]; then
+          echo "ERROR: monitor_result.json missing — monitor crashed"
+          exit 1
+        fi
+
+        ISSUE_COUNT=$(jq '.issues | length' monitor_result.json)
+        echo "Issue count: $ISSUE_COUNT"
+
+        if [ "$ISSUE_COUNT" -gt 0 ]; then
+          # label 不存在时创建，失败不阻断
+          gh label create copyright-alert --color d73a4a 2>/dev/null || true
+
+          jq -r '.issues[] | "**EP\(.ep)**: [\(.video_id)](https://youtube.com/watch?v=\(.video_id))\n- 原因: \(.reason)\n"' \
+            monitor_result.json > issue_lines.md
+
+          {
+            echo "## 发现版权问题"
+            echo ""
+            echo "以下视频已自动设为 private（仅自己可见）："
+            echo ""
+            cat issue_lines.md
+            echo "---"
+            echo "监控时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          } > issue_body.md
+
+          gh issue create \
+            --title "YouTube copyright alert - $(date -u '+%Y-%m-%d %H:%M')" \
+            --label copyright-alert \
+            --body-file issue_body.md
+          echo "Issue created."
+        else
+          echo "No copyright issues found."
+        fi
