@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TikTok Authorization - Social Auto-Publish</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 48px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    .icon {
+      width: 72px;
+      height: 72px;
+      background: linear-gradient(135deg, #25F4EE 0%, #FE2C55 50%, #000 100%);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      font-size: 32px;
+    }
+    h1 {
+      font-size: 1.5rem;
+      color: #1a1a1a;
+      margin-bottom: 12px;
+    }
+    p {
+      color: #666;
+      margin-bottom: 24px;
+      line-height: 1.6;
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      background: #f0fdf4;
+      color: #166534;
+      border-radius: 100px;
+      font-weight: 500;
+      margin-bottom: 24px;
+    }
+    .status.error {
+      background: #fef2f2;
+      color: #991b1b;
+    }
+    .status.loading {
+      background: #f8fafc;
+      color: #475569;
+    }
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid #e2e8f0;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .info {
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 0.875rem;
+      color: #64748b;
+      text-align: left;
+    }
+    .info code {
+      background: #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.8rem;
+    }
+    .back-link {
+      display: inline-block;
+      margin-top: 24px;
+      color: #6366f1;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .back-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">🎵</div>
+    <h1>TikTok Authorization</h1>
+    <p id="message">Processing your TikTok authorization...</p>
+    <div class="status loading" id="status">
+      <div class="spinner"></div>
+      <span>Processing</span>
+    </div>
+    <div class="info" id="info" style="display: none;">
+      <p><strong>Authorization Code:</strong></p>
+      <p><code id="code-display">-</code></p>
+    </div>
+    <a href="./" class="back-link">← Back to Social Auto-Publish</a>
+  </div>
+
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const hash = new URLSearchParams(window.location.hash.substring(1));
+      
+      const code = params.get('code') || hash.get('code');
+      const error = params.get('error') || hash.get('error');
+      const errorDescription = params.get('error_description') || hash.get('error_description');
+      const state = params.get('state') || hash.get('state');
+
+      const messageEl = document.getElementById('message');
+      const statusEl = document.getElementById('status');
+      const infoEl = document.getElementById('info');
+      const codeEl = document.getElementById('code-display');
+
+      if (error) {
+        messageEl.textContent = errorDescription || 'Authorization was denied or failed.';
+        statusEl.className = 'status error';
+        statusEl.innerHTML = '<span>❌</span><span>Authorization Failed</span>';
+      } else if (code) {
+        messageEl.textContent = 'Authorization successful! You can now close this window and return to the application.';
+        statusEl.className = 'status';
+        statusEl.innerHTML = '<span>✓</span><span>Authorized</span>';
+        
+        // Show code for debugging (in production, this would be sent to backend)
+        infoEl.style.display = 'block';
+        codeEl.textContent = code.substring(0, 20) + '...';
+
+        // Try to send to local app if running
+        const localCallback = 'http://localhost:19876/';
+        try {
+          // Redirect to local app with the authorization code
+          const redirectUrl = localCallback + window.location.search + window.location.hash;
+          setTimeout(() => {
+            window.location.href = redirectUrl;
+          }, 1500);
+          messageEl.textContent = 'Authorization successful! Redirecting to application...';
+        } catch (e) {
+          // Local app not running, just show success
+          messageEl.textContent = 'Authorization successful! Please return to the application to complete setup.';
+        }
+      } else {
+        messageEl.textContent = 'No authorization code received. Please try again.';
+        statusEl.className = 'status error';
+        statusEl.innerHTML = '<span>⚠️</span><span>No Code Received</span>';
+      }
+    })();
+  </script>
+</body>
+</html>
