@@ -3,271 +3,673 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Social Auto-Publish - Professional content scheduling platform for creators. Publish to TikTok, YouTube and more from one dashboard.">
+  <meta name="keywords" content="social media scheduler, TikTok publishing, YouTube scheduler, content creator tools, video publishing platform">
+  <meta property="og:title" content="Social Auto-Publish - Multi-Platform Content Scheduling">
+  <meta property="og:description" content="Upload once, publish everywhere. Schedule and distribute your video content across TikTok, YouTube, and more.">
+  <meta property="og:type" content="website">
   <title>Social Auto-Publish - Multi-Platform Content Scheduling for Creators</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      line-height: 1.6;
-      color: #1a1a1a;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
+    
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --secondary: #0ea5e9;
+      --dark: #0f172a;
+      --gray-900: #1e293b;
+      --gray-700: #334155;
+      --gray-500: #64748b;
+      --gray-300: #cbd5e1;
+      --gray-100: #f1f5f9;
+      --white: #ffffff;
     }
-    .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      color: var(--gray-700);
+      background: var(--white);
+      -webkit-font-smoothing: antialiased;
+    }
+    
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    
+    /* Navigation */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--gray-100);
+      z-index: 1000;
+      padding: 16px 0;
+    }
+    nav .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--dark);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 1.1rem;
+    }
+    .nav-links { display: flex; gap: 32px; align-items: center; }
+    .nav-links a {
+      color: var(--gray-700);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--primary); }
     
     /* Hero */
     .hero {
-      padding: 80px 0 60px;
+      padding: 160px 0 100px;
+      background: linear-gradient(180deg, var(--gray-100) 0%, var(--white) 100%);
       text-align: center;
-      color: #fff;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--white);
+      border: 1px solid var(--gray-300);
+      padding: 8px 16px;
+      border-radius: 100px;
+      font-size: 0.875rem;
+      color: var(--gray-700);
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .hero-badge-dot {
+      width: 8px;
+      height: 8px;
+      background: #22c55e;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
     }
     .hero h1 {
-      font-size: 2.8rem;
-      font-weight: 700;
-      margin-bottom: 20px;
-      text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      font-size: 3.5rem;
+      font-weight: 800;
+      color: var(--dark);
+      line-height: 1.1;
+      margin-bottom: 24px;
+      letter-spacing: -0.02em;
+    }
+    .hero h1 span {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
     .hero p {
       font-size: 1.25rem;
-      opacity: 0.95;
+      color: var(--gray-500);
       max-width: 600px;
-      margin: 0 auto 30px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
     }
-    .hero-badge {
-      display: inline-block;
-      background: rgba(255,255,255,0.2);
-      padding: 8px 20px;
-      border-radius: 30px;
-      font-size: 0.9rem;
-      backdrop-filter: blur(10px);
+    .hero-cta {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+    }
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+    }
+    .btn-secondary {
+      background: var(--white);
+      color: var(--gray-700);
+      border: 1px solid var(--gray-300);
+    }
+    .btn-secondary:hover {
+      background: var(--gray-100);
+      border-color: var(--gray-500);
     }
     
-    /* Features */
-    .features {
-      background: #fff;
+    /* Platforms Bar */
+    .platforms-bar {
       padding: 60px 0;
-      border-radius: 20px 20px 0 0;
-      margin-top: -20px;
+      background: var(--white);
+      border-bottom: 1px solid var(--gray-100);
     }
-    .features h2 {
+    .platforms-bar p {
       text-align: center;
-      font-size: 2rem;
-      margin-bottom: 50px;
-      color: #333;
-    }
-    .feature-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 30px;
-    }
-    .feature-card {
-      padding: 30px;
-      background: #f8f9fa;
-      border-radius: 12px;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .feature-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-    }
-    .feature-icon {
-      font-size: 2.5rem;
-      margin-bottom: 15px;
-    }
-    .feature-card h3 {
-      font-size: 1.2rem;
-      margin-bottom: 10px;
-      color: #333;
-    }
-    .feature-card p {
-      color: #666;
-      font-size: 0.95rem;
-    }
-    
-    /* Platforms */
-    .platforms {
-      background: #fff;
-      padding: 40px 0 60px;
-      text-align: center;
-    }
-    .platforms h2 {
-      font-size: 1.5rem;
-      color: #666;
+      color: var(--gray-500);
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
       margin-bottom: 30px;
-      font-weight: 500;
     }
     .platform-logos {
       display: flex;
       justify-content: center;
-      gap: 40px;
-      flex-wrap: wrap;
       align-items: center;
+      gap: 48px;
+      flex-wrap: wrap;
     }
-    .platform-logo {
+    .platform-item {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
+      color: var(--gray-500);
+      font-weight: 500;
       font-size: 1.1rem;
-      color: #444;
-      padding: 15px 25px;
-      background: #f5f5f5;
-      border-radius: 10px;
     }
-    .platform-logo span { font-size: 1.5rem; }
-    
-    /* How it works */
-    .how-it-works {
-      background: #f8f9fa;
-      padding: 60px 0;
-    }
-    .how-it-works h2 {
-      text-align: center;
-      font-size: 2rem;
-      margin-bottom: 50px;
-      color: #333;
-    }
-    .steps {
-      display: flex;
-      justify-content: space-between;
-      gap: 20px;
-      flex-wrap: wrap;
-    }
-    .step {
-      flex: 1;
-      min-width: 200px;
-      text-align: center;
-      padding: 20px;
-    }
-    .step-number {
-      width: 50px;
-      height: 50px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: #fff;
-      border-radius: 50%;
+    .platform-icon {
+      width: 48px;
+      height: 48px;
+      background: var(--gray-100);
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 1.5rem;
-      font-weight: 700;
-      margin: 0 auto 15px;
     }
-    .step h3 { margin-bottom: 10px; color: #333; }
-    .step p { color: #666; font-size: 0.9rem; }
+    
+    /* Features */
+    .features {
+      padding: 100px 0;
+      background: var(--white);
+    }
+    .section-header {
+      text-align: center;
+      max-width: 700px;
+      margin: 0 auto 60px;
+    }
+    .section-label {
+      display: inline-block;
+      background: linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(14,165,233,0.1) 100%);
+      color: var(--primary);
+      padding: 6px 14px;
+      border-radius: 100px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .section-header h2 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: var(--dark);
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+    }
+    .section-header p {
+      font-size: 1.125rem;
+      color: var(--gray-500);
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+    }
+    @media (max-width: 900px) {
+      .features-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 600px) {
+      .features-grid { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 2.5rem; }
+    }
+    .feature-card {
+      padding: 32px;
+      background: var(--gray-100);
+      border-radius: 16px;
+      transition: all 0.3s;
+    }
+    .feature-card:hover {
+      background: var(--white);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+      transform: translateY(-4px);
+    }
+    .feature-icon {
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      margin-bottom: 20px;
+    }
+    .feature-card h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--dark);
+      margin-bottom: 12px;
+    }
+    .feature-card p {
+      color: var(--gray-500);
+      font-size: 0.95rem;
+      line-height: 1.7;
+    }
+    
+    /* How It Works */
+    .how-it-works {
+      padding: 100px 0;
+      background: var(--gray-100);
+    }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      position: relative;
+    }
+    @media (max-width: 900px) {
+      .steps { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 600px) {
+      .steps { grid-template-columns: 1fr; }
+    }
+    .step {
+      background: var(--white);
+      padding: 32px 24px;
+      border-radius: 16px;
+      text-align: center;
+      position: relative;
+    }
+    .step-number {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin: 0 auto 20px;
+    }
+    .step h3 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--dark);
+      margin-bottom: 10px;
+    }
+    .step p {
+      color: var(--gray-500);
+      font-size: 0.9rem;
+    }
+    
+    /* Stats */
+    .stats {
+      padding: 80px 0;
+      background: var(--dark);
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 32px;
+      text-align: center;
+    }
+    @media (max-width: 768px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .stat-item h3 {
+      font-size: 3rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+    .stat-item p {
+      color: var(--gray-300);
+      font-size: 0.95rem;
+    }
+    
+    /* CTA */
+    .cta {
+      padding: 100px 0;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      text-align: center;
+    }
+    .cta h2 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 16px;
+    }
+    .cta p {
+      font-size: 1.125rem;
+      color: rgba(255,255,255,0.85);
+      margin-bottom: 32px;
+      max-width: 500px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .cta .btn {
+      background: white;
+      color: var(--primary);
+    }
+    .cta .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
     
     /* Footer */
     footer {
-      background: #1a1a1a;
-      color: #888;
-      padding: 40px 0;
-      text-align: center;
+      background: var(--dark);
+      padding: 60px 0 30px;
     }
-    footer a {
-      color: #aaa;
+    .footer-content {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 48px;
+      margin-bottom: 48px;
+    }
+    @media (max-width: 768px) {
+      .footer-content { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 480px) {
+      .footer-content { grid-template-columns: 1fr; }
+    }
+    .footer-brand .logo { color: white; margin-bottom: 16px; }
+    .footer-brand p { color: var(--gray-500); font-size: 0.9rem; line-height: 1.7; }
+    .footer-links h4 {
+      color: white;
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 20px;
+    }
+    .footer-links ul { list-style: none; }
+    .footer-links li { margin-bottom: 12px; }
+    .footer-links a {
+      color: var(--gray-500);
       text-decoration: none;
-      margin: 0 15px;
+      font-size: 0.95rem;
+      transition: color 0.2s;
     }
-    footer a:hover { color: #fff; }
-    .footer-links { margin-bottom: 20px; }
-    .copyright { font-size: 0.85rem; }
+    .footer-links a:hover { color: white; }
+    .footer-bottom {
+      border-top: 1px solid var(--gray-700);
+      padding-top: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .footer-bottom p { color: var(--gray-500); font-size: 0.875rem; }
+    .footer-bottom-links { display: flex; gap: 24px; }
+    .footer-bottom-links a {
+      color: var(--gray-500);
+      text-decoration: none;
+      font-size: 0.875rem;
+    }
+    .footer-bottom-links a:hover { color: white; }
   </style>
 </head>
 <body>
+  <!-- Navigation -->
+  <nav>
+    <div class="container">
+      <a href="./" class="logo">
+        <span class="logo-icon">▶</span>
+        Social Auto-Publish
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How It Works</a>
+        <a href="https://github.com/Jay-Z-zhang/social-auto-upload" target="_blank">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
   <section class="hero">
     <div class="container">
-      <h1>Social Auto-Publish</h1>
-      <p>A content scheduling platform for creators. Upload once, publish everywhere — TikTok, YouTube, and more.</p>
-      <span class="hero-badge">Batch scheduling · Multi-platform · Status tracking</span>
+      <div class="hero-badge">
+        <span class="hero-badge-dot"></span>
+        Now supporting TikTok & YouTube
+      </div>
+      <h1>Publish Content to<br><span>Multiple Platforms</span><br>Effortlessly</h1>
+      <p>A professional content scheduling platform for creators. Upload once, schedule smartly, and let your videos reach audiences across TikTok, YouTube, and beyond.</p>
+      <div class="hero-cta">
+        <a href="https://github.com/Jay-Z-zhang/social-auto-upload" class="btn btn-primary">
+          <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          View on GitHub
+        </a>
+        <a href="#features" class="btn btn-secondary">Learn More</a>
+      </div>
     </div>
   </section>
 
-  <section class="features">
+  <!-- Platforms -->
+  <section class="platforms-bar">
     <div class="container">
-      <h2>Built for Content Creators</h2>
-      <div class="feature-grid">
+      <p>Supported Platforms</p>
+      <div class="platform-logos">
+        <div class="platform-item">
+          <span class="platform-icon">🎵</span>
+          TikTok
+        </div>
+        <div class="platform-item">
+          <span class="platform-icon">▶️</span>
+          YouTube
+        </div>
+        <div class="platform-item">
+          <span class="platform-icon">📱</span>
+          Douyin
+        </div>
+        <div class="platform-item">
+          <span class="platform-icon">🎬</span>
+          Kuaishou
+        </div>
+        <div class="platform-item">
+          <span class="platform-icon">📺</span>
+          WeChat Channels
+        </div>
+        <div class="platform-item">
+          <span class="platform-icon">📕</span>
+          Xiaohongshu
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-label">Features</span>
+        <h2>Everything You Need to Scale Your Content</h2>
+        <p>Professional tools designed for content creators who want to maximize their reach without the manual work.</p>
+      </div>
+      <div class="features-grid">
         <div class="feature-card">
           <div class="feature-icon">🔗</div>
           <h3>Multi-Account Management</h3>
-          <p>Connect multiple TikTok and YouTube accounts. Manage all your channels from one dashboard.</p>
+          <p>Connect and manage multiple accounts across different platforms. Switch between accounts seamlessly from one unified dashboard.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">📅</div>
-          <h3>Scheduled Publishing</h3>
-          <p>Set your posting schedule — 2 videos per day at 12:00 and 19:00, starting tomorrow. We handle the rest.</p>
+          <h3>Smart Scheduling</h3>
+          <p>Set custom publishing schedules — choose specific times, days, and frequency. Your content goes live automatically.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon">🚀</div>
+          <div class="feature-icon">📦</div>
           <h3>Batch Upload</h3>
-          <p>Upload an entire series at once. Add titles, descriptions, and tags in bulk. One click to queue them all.</p>
+          <p>Upload entire video series at once. Add titles, descriptions, and tags in bulk. Queue dozens of videos in minutes.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">📊</div>
-          <h3>Real-time Status</h3>
-          <p>Track every upload: pending, processing, published, or failed. Retry with one click if something goes wrong.</p>
+          <h3>Real-Time Status</h3>
+          <p>Track every upload in real-time. See pending, processing, published, and failed status. Retry failed uploads with one click.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">✅</div>
-          <h3>Compliance Pre-check</h3>
-          <p>YouTube uploads go through content and copyright checks before going public. Catch issues early.</p>
+          <h3>Compliance Pre-Check</h3>
+          <p>Videos go through content and copyright verification before publishing. Catch potential issues before they affect your channel.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🔒</div>
-          <h3>Your Data Stays Local</h3>
-          <p>OAuth tokens and videos stay on your device. We don't run a server that stores your content.</p>
+          <h3>Privacy First</h3>
+          <p>Your credentials and videos stay on your device. We don't store your content on our servers. You maintain full control.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="platforms">
+  <!-- How It Works -->
+  <section class="how-it-works" id="how-it-works">
     <div class="container">
-      <h2>Supported Platforms</h2>
-      <div class="platform-logos">
-        <div class="platform-logo"><span>🎵</span> TikTok</div>
-        <div class="platform-logo"><span>▶️</span> YouTube</div>
-        <div class="platform-logo"><span>📱</span> Douyin</div>
-        <div class="platform-logo"><span>🎬</span> Kuaishou</div>
-        <div class="platform-logo"><span>📺</span> WeChat Channels</div>
-        <div class="platform-logo"><span>📕</span> Xiaohongshu</div>
+      <div class="section-header">
+        <span class="section-label">How It Works</span>
+        <h2>Get Started in Minutes</h2>
+        <p>Simple workflow designed to save you hours of repetitive publishing tasks.</p>
       </div>
-    </div>
-  </section>
-
-  <section class="how-it-works">
-    <div class="container">
-      <h2>How It Works</h2>
       <div class="steps">
         <div class="step">
           <div class="step-number">1</div>
-          <h3>Connect</h3>
-          <p>Link your TikTok, YouTube, or other accounts via secure OAuth.</p>
+          <h3>Connect Accounts</h3>
+          <p>Link your TikTok, YouTube, or other social accounts via secure OAuth authorization.</p>
         </div>
         <div class="step">
           <div class="step-number">2</div>
-          <h3>Upload</h3>
-          <p>Add your videos to the media library. Enter titles, descriptions, and hashtags.</p>
+          <h3>Upload Content</h3>
+          <p>Add your videos to the media library. Enter titles, descriptions, hashtags, and thumbnails.</p>
         </div>
         <div class="step">
           <div class="step-number">3</div>
-          <h3>Schedule</h3>
-          <p>Pick your posting times — or publish immediately. Set it and forget it.</p>
+          <h3>Set Schedule</h3>
+          <p>Choose when each video goes live. Set daily limits and preferred posting times.</p>
         </div>
         <div class="step">
           <div class="step-number">4</div>
-          <h3>Track</h3>
-          <p>Watch your content go live. Get notified if anything needs attention.</p>
+          <h3>Track & Manage</h3>
+          <p>Monitor publishing progress. Get notified of issues. Retry or reschedule as needed.</p>
         </div>
       </div>
     </div>
   </section>
 
+  <!-- Stats -->
+  <section class="stats">
+    <div class="container">
+      <div class="stats-grid">
+        <div class="stat-item">
+          <h3>6+</h3>
+          <p>Supported Platforms</p>
+        </div>
+        <div class="stat-item">
+          <h3>100%</h3>
+          <p>Local & Private</p>
+        </div>
+        <div class="stat-item">
+          <h3>24/7</h3>
+          <p>Automated Publishing</p>
+        </div>
+        <div class="stat-item">
+          <h3>∞</h3>
+          <p>Videos Supported</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta">
+    <div class="container">
+      <h2>Ready to Streamline Your Publishing?</h2>
+      <p>Join creators who save hours every week with automated multi-platform publishing.</p>
+      <a href="https://github.com/Jay-Z-zhang/social-auto-upload" class="btn">
+        Get Started — It's Free
+      </a>
+    </div>
+  </section>
+
+  <!-- Footer -->
   <footer>
     <div class="container">
-      <div class="footer-links">
-        <a href="./privacy-policy/">Privacy Policy</a>
-        <a href="./terms-of-service/">Terms of Service</a>
-        <a href="https://github.com/Jay-Z-zhang/social-auto-upload">GitHub</a>
+      <div class="footer-content">
+        <div class="footer-brand">
+          <a href="./" class="logo">
+            <span class="logo-icon">▶</span>
+            Social Auto-Publish
+          </a>
+          <p>A professional content scheduling platform for creators. Upload once, publish everywhere.</p>
+        </div>
+        <div class="footer-links">
+          <h4>Product</h4>
+          <ul>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#how-it-works">How It Works</a></li>
+            <li><a href="https://github.com/Jay-Z-zhang/social-auto-upload" target="_blank">Documentation</a></li>
+          </ul>
+        </div>
+        <div class="footer-links">
+          <h4>Legal</h4>
+          <ul>
+            <li><a href="./privacy-policy/">Privacy Policy</a></li>
+            <li><a href="./terms-of-service/">Terms of Service</a></li>
+          </ul>
+        </div>
+        <div class="footer-links">
+          <h4>Connect</h4>
+          <ul>
+            <li><a href="https://github.com/Jay-Z-zhang/social-auto-upload" target="_blank">GitHub</a></li>
+            <li><a href="mailto:jayz_z@foxmail.com">Contact Us</a></li>
+          </ul>
+        </div>
       </div>
-      <p class="copyright">© 2026 Social Auto-Publish. All rights reserved.</p>
+      <div class="footer-bottom">
+        <p>© 2026 Social Auto-Publish. All rights reserved.</p>
+        <div class="footer-bottom-links">
+          <a href="./privacy-policy/">Privacy</a>
+          <a href="./terms-of-service/">Terms</a>
+        </div>
+      </div>
     </div>
   </footer>
 </body>
