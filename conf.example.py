@@ -9,6 +9,11 @@ DEBUG_MODE = True  # default debug behavior
 # connections time out and the (patchright) chromium does NOT use the system proxy.
 # Point this at your local proxy port, e.g. "http://127.0.0.1:7890". None = no proxy.
 YT_PROXY = None
+# Optional proxy for the TikTok uploader (browser automation). Playwright's firefox
+# inherits the Windows system proxy, but that silently breaks when the proxy client
+# only runs TUN mode or system proxy is off; the bundled chromium ignores it entirely.
+# Point this at your local proxy port, e.g. "http://127.0.0.1:7890". None = no proxy.
+TK_PROXY = None
 
 # --- Compliance pre-review (sau review) ---
 # YouTube Data API v3 OAuth credentials (download from GCP Console).

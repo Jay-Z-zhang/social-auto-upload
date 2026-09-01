@@ -31,12 +31,15 @@ cover_logger = logger.bind(business_name="cover")
 TARGET_WIDTH = 1280
 TARGET_HEIGHT = 720
 
-# macOS system fonts; the loader falls back through them in order.
+# macOS / Windows / Linux system fonts; the loader falls back through them in order.
 DEFAULT_FONT_CANDIDATES = [
     "/System/Library/Fonts/Supplemental/Impact.ttf",
     "/System/Library/Fonts/Supplemental/Arial Black.ttf",
     "/System/Library/Fonts/HelveticaNeue.ttc",
     "/System/Library/Fonts/Helvetica.ttc",
+    "C:/Windows/Fonts/impact.ttf",       # Windows
+    "C:/Windows/Fonts/ariblk.ttf",       # Windows Arial Black
+    "C:/Windows/Fonts/arialbd.ttf",      # Windows Arial Bold（无 Impact/Black 时的回退）
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",  # Linux fallback
 ]
 

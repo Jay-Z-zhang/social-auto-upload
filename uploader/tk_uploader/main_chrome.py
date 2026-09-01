@@ -7,6 +7,14 @@ import os
 import asyncio
 
 from conf import LOCAL_CHROME_PATH, LOCAL_CHROME_HEADLESS
+
+try:
+    # tiktok.com 需要走代理，且 playwright 的 chromium 不吃系统代理，必须显式传。
+    # 在 conf.py 设 TK_PROXY = "http://127.0.0.1:7890"（本地代理端口）即可；不设则不走代理。
+    from conf import TK_PROXY
+except Exception:
+    TK_PROXY = None
+
 from uploader.tk_uploader.tk_config import Tk_Locator
 from utils.base_social_media import set_init_script
 from utils.files_times import get_absolute_path
@@ -15,14 +23,24 @@ from utils.log import tiktok_logger
 
 async def cookie_auth(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
+        browser = await playwright.chromium.launch(
+            headless=LOCAL_CHROME_HEADLESS,
+            proxy={"server": TK_PROXY} if TK_PROXY else None,
+        )
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
         page = await context.new_page()
-        # 访问指定的 URL
-        await page.goto("https://www.tiktok.com/tiktokstudio/upload?lang=en")
-        await page.wait_for_load_state('networkidle')
+        # 访问指定的 URL（domcontentloaded 就够：校验只看 select 元素，等 load 全资源太慢）
+        await page.goto(
+            "https://www.tiktok.com/tiktokstudio/upload?lang=en",
+            wait_until="domcontentloaded", timeout=60000,
+        )
+        try:
+            # TikTok Studio 有持续网络活动，networkidle 常年等不到，超时不算失败
+            await page.wait_for_load_state('networkidle')
+        except Exception:
+            pass
         try:
             # 选择所有的 select 元素
             select_elements = await page.query_selector_all('select')
@@ -56,6 +74,7 @@ async def get_tiktok_cookie(account_file):
                 '--lang en-GB',
             ],
             'headless': LOCAL_CHROME_HEADLESS,  # Set headless option here
+            'proxy': {'server': TK_PROXY} if TK_PROXY else None,
         }
         # Make sure to run headed.
         browser = await playwright.chromium.launch(**options)
@@ -147,7 +166,13 @@ class TiktokVideo(object):
         await file_chooser.set_files(self.file_path)
 
     async def upload(self, playwright: Playwright) -> None:
-        browser = await playwright.chromium.launch(headless=self.headless, executable_path=self.local_executable_path)
+        browser = await playwright.chromium.launch(
+            headless=self.headless,
+            # LOCAL_CHROME_PATH 为空串表示未配置：归一化为 None，用 playwright 自带 chromium，
+            # 否则空串会被当成可执行路径导致 spawn ENOENT。
+            executable_path=self.local_executable_path or None,
+            proxy={"server": TK_PROXY} if TK_PROXY else None,
+        )
         context = await browser.new_context(storage_state=f"{self.account_file}")
         # context = await set_init_script(context)
         page = await context.new_page()

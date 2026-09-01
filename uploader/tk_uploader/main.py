@@ -11,10 +11,20 @@ from utils.files_times import get_absolute_path
 from utils.log import tiktok_logger
 from conf import LOCAL_CHROME_HEADLESS
 
+try:
+    # tiktok.com 也走代理：firefox 虽默认继承系统代理，但系统代理一关就静默断网。
+    # 在 conf.py 设 TK_PROXY = "http://127.0.0.1:7890"（本地代理端口）即可；不设则不走代理。
+    from conf import TK_PROXY
+except Exception:
+    TK_PROXY = None
+
 
 async def cookie_auth(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.firefox.launch(headless=LOCAL_CHROME_HEADLESS)
+        browser = await playwright.firefox.launch(
+            headless=LOCAL_CHROME_HEADLESS,
+            proxy={"server": TK_PROXY} if TK_PROXY else None,
+        )
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -55,6 +65,7 @@ async def get_tiktok_cookie(account_file):
                 '--lang en-GB',
             ],
             'headless': LOCAL_CHROME_HEADLESS,  # Set headless option here
+            'proxy': {'server': TK_PROXY} if TK_PROXY else None,
         }
         # Make sure to run headed.
         browser = await playwright.firefox.launch(**options)
@@ -142,7 +153,10 @@ class TiktokVideo(object):
         await file_chooser.set_files(self.file_path)
 
     async def upload(self, playwright: Playwright) -> None:
-        browser = await playwright.firefox.launch(headless=self.headless)
+        browser = await playwright.firefox.launch(
+            headless=self.headless,
+            proxy={"server": TK_PROXY} if TK_PROXY else None,
+        )
         context = await browser.new_context(storage_state=f"{self.account_file}")
         context = await set_init_script(context)
         page = await context.new_page()

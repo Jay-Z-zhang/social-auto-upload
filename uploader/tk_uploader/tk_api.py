@@ -22,6 +22,10 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 
+# open.tiktokapis.com 国内可直连，但走 HTTP(S)_PROXY 环境代理时部分节点会掐断 TLS
+# （SSL UNEXPECTED_EOF）。httpx 默认 trust_env=True 会读环境代理，这里统一强制直连。
+_DIRECT = {"trust_env": False}
+
 from conf import BASE_DIR
 from utils.log import tiktok_logger
 
@@ -135,6 +139,7 @@ class TikTokAPI:
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token,
             },
+            **_DIRECT,
         )
         resp.raise_for_status()
         return resp.json()
@@ -202,6 +207,7 @@ class TikTokAPI:
                 "grant_type": "authorization_code",
                 "redirect_uri": redirect_uri,
             },
+            **_DIRECT,
         )
         resp.raise_for_status()
         token_data = resp.json()
@@ -235,6 +241,7 @@ class TikTokAPI:
         resp = httpx.post(
             f"{API_BASE}/v2/post/publish/creator_info/query/",
             headers=self._headers(),
+            **_DIRECT,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -286,6 +293,7 @@ class TikTokAPI:
             headers=self._headers(),
             json=body,
             timeout=30,
+            **_DIRECT,
         )
         data = resp.json() if resp.content else {}
         if resp.status_code >= 400 or data.get("error", {}).get("code") not in (None, "ok"):
@@ -311,7 +319,7 @@ class TikTokAPI:
             "Content-Range": f"bytes 0-{file_size - 1}/{file_size}",
         }
 
-        resp = httpx.put(upload_url, headers=headers, content=data, timeout=600)
+        resp = httpx.put(upload_url, headers=headers, content=data, timeout=600, **_DIRECT)
         resp.raise_for_status()
         tiktok_logger.success("TikTok file upload complete.")
 
@@ -345,6 +353,7 @@ class TikTokAPI:
                 headers=self._headers(),
                 json={"publish_id": publish_id},
                 timeout=30,
+                **_DIRECT,
             )
             resp.raise_for_status()
             data = resp.json().get("data", {})

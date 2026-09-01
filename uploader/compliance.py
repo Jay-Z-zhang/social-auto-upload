@@ -548,6 +548,7 @@ def run_batch_review(
     tiktok_mirror: bool = False,
     policy: PublishPolicy | None = None,
     auto_cover: bool = True,
+    max_items: int = 0,
 ) -> list[ReviewOutcome]:
     """Review each video, then schedule YouTube public times so posts are staggered."""
     platforms = platforms or ["youtube"]
@@ -558,12 +559,25 @@ def run_batch_review(
     episodes = load_episodes(directory)
 
     yt_uploads_per_ep = 2 if (series.shorts_cut_seconds > 0 and "youtube" in platforms) else 1
-    quota_used = len(videos) * yt_uploads_per_ep
+
+    # 统计 pending（manifest 已完成的集数不占本次额度），并按 max_items 截断，
+    # 让「每天重跑、每次续 N 集」的长剧排期跑在 YT 配额之内。
+    pending_eps: list[int] = []
+    for v in videos:
+        ep = extract_ep_number(v)
+        st = manifest_get_state(directory, ep) if ep is not None else None
+        if st and st.is_yt_done():
+            continue
+        if ep is not None:
+            pending_eps.append(ep)
+    if max_items > 0:
+        pending_eps = pending_eps[:max_items]
+
+    quota_used = len(pending_eps) * yt_uploads_per_ep
     if quota_used > policy.hard_yt_daily_max:
         raise RuntimeError(
-            f"Found {len(videos)} videos × {yt_uploads_per_ep} YT uploads = {quota_used} inserts, "
-            f"but YouTube API quota allows about {policy.hard_yt_daily_max}/day. "
-            f"Split the folder or disable shorts_cut_seconds."
+            f"{quota_used} pending YT uploads (> {policy.hard_yt_daily_max}/day quota). "
+            f"Run again tomorrow, or use --max-items to chunk, or disable shorts_cut_seconds."
         )
     if "youtube" in platforms and per_day > policy.yt_per_day:
         compliance_logger.warning(
@@ -587,6 +601,14 @@ def run_batch_review(
               f"<stem>_short.mp4 clip. YT quota usage doubles.")
 
     planned = plan_batch_schedule(videos, per_day=per_day, daily_hours=daily_hours, start_days=start_days)
+
+    # 与配额统计同一口径：只保留 pending 的前 N 集（done 的不占名额也不重跑）
+    pending_set = set(pending_eps)
+    planned = [
+        (video, when)
+        for video, when in planned
+        if (ep := extract_ep_number(video)) is None or ep in pending_set
+    ]
 
     print("Batch schedule (YouTube goes public at these local times):")
     print("-" * 60)

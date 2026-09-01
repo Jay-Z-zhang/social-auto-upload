@@ -1088,6 +1088,7 @@ def build_parser() -> argparse.ArgumentParser:
     batch_parser.add_argument("--min-interval", type=int, default=90, help="Minimum seconds between consecutive submits (default 90).")
     batch_parser.add_argument("--yt-per-day-max", type=int, default=3, help="Warn if per-day exceeds this (default 3; hard ceiling 6 from YT quota).")
     batch_parser.add_argument("--tt-per-day-max", type=int, default=5, help="Warn if batch size exceeds this for TikTok (default 5).")
+    batch_parser.add_argument("--max-items", type=int, default=0, help="Process only the first N not-yet-done episodes this run (0 = all pending). Chunks a large series across days within YT quota.")
     batch_parser.add_argument("--dry-run", action="store_true", help="Print the schedule only, do not upload")
 
     preflight_parser = platform_parsers.add_parser(
@@ -1497,6 +1498,7 @@ async def dispatch(args: argparse.Namespace) -> int:
                 min_interval_seconds=args.min_interval,
             ),
             auto_cover=not args.no_auto_cover,
+            max_items=getattr(args, "max_items", 0),
         )
         if args.dry_run:
             return 0

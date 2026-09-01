@@ -19,6 +19,7 @@ from typing import Any
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from google_auth_httplib2 import AuthorizedHttp
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -30,6 +31,14 @@ try:
     from conf import YOUTUBE_CLIENT_SECRET_FILE
 except ImportError:
     YOUTUBE_CLIENT_SECRET_FILE = "client_secret.json"
+
+try:
+    # googleapiclient 底层的 httplib2 不读 HTTP(S)_PROXY 环境变量，国内直连 googleapis
+    # 会超时（OAuth 授权走 requests 没这个问题，所以登录能成、上传必挂）。
+    # 在 conf.py 设 YT_PROXY = "http://127.0.0.1:7890" 让 Data API 请求显式走代理。
+    from conf import YT_PROXY
+except ImportError:
+    YT_PROXY = None
 
 try:
     from conf import COMPLIANCE_POLL_INTERVAL
@@ -124,8 +133,32 @@ class YouTubeAPI:
 
         self._token_path.write_text(creds.to_json(), encoding="utf-8")
         self._creds = creds
-        self._service = build("youtube", "v3", credentials=creds)
+        self._service = self._build_service(creds)
         youtube_logger.success(f"YouTube API authenticated (account: {self.account_name})")
+
+    def _build_service(self, creds: Credentials):
+        """构造 Data API service；配置了 YT_PROXY 时让 httplib2 显式走代理。"""
+        if not YT_PROXY:
+            return build("youtube", "v3", credentials=creds)
+        import httplib2
+        import socks
+        from urllib.parse import urlparse
+
+        parsed = urlparse(YT_PROXY)
+        proxy_info = httplib2.ProxyInfo(
+            socks.PROXY_TYPE_HTTP, parsed.hostname, parsed.port or 7890
+        )
+        http = httplib2.Http(proxy_info=proxy_info, timeout=120)
+        # Google resumable 上传用 308 (Resume Incomplete) 通知客户端继续传下一块，
+        # 该响应带 Range 头但没有 Location 头；httplib2 默认把 308 当重定向，
+        # 一遇到就抛 RedirectMissingLocation。build(credentials=...) 内部的 build_http()
+        # 会剔除 308，但传入自定义 http 对象时不会——必须手动剔除。
+        try:
+            http.redirect_codes = http.redirect_codes - {308}
+        except AttributeError:
+            pass
+        authed_http = AuthorizedHttp(creds, http=http)
+        return build("youtube", "v3", http=authed_http)
 
     @property
     def service(self):
@@ -272,6 +305,25 @@ class YouTubeAPI:
             body={"id": video_id, "status": {"privacyStatus": "public"}},
         ).execute()
         youtube_logger.success(f"Video {video_id} is now PUBLIC.")
+
+    def make_private(self, video_id: str) -> None:
+        """Switch a video to private (e.g. after detecting copyright issues)."""
+        self.service.videos().update(
+            part="status",
+            body={"id": video_id, "status": {"privacyStatus": "private"}},
+        ).execute()
+        youtube_logger.success(f"Video {video_id} is now PRIVATE.")
+
+    def get_video_status(self, video_id: str) -> dict[str, Any]:
+        """Fetch current status of a video (privacy, upload status, rejection reason, etc.)."""
+        resp = self.service.videos().list(
+            part="status,contentDetails",
+            id=video_id,
+        ).execute()
+        items = resp.get("items", [])
+        if not items:
+            return {}
+        return items[0]
 
     def schedule_publish(self, video_id: str, publish_at: datetime) -> None:
         """Schedule a private video to go public at *publish_at* (local naive or aware)."""
