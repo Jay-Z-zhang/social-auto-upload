@@ -175,7 +175,13 @@ def has_copyright_issue(status_dict: dict, was_scheduled: bool = False) -> tuple
     if privacy_status == "unlisted":
         return True, "Privacy changed to unlisted (was public/scheduled)"
 
-    if privacy_status == "private" and not publish_at and not was_scheduled:
+    if privacy_status == "private" and not publish_at:
+        # private 且无排期。两种可能无法区分：
+        # a) 排期被 update 误清（需人工恢复排期）
+        # b) YouTube 因版权强制下架（绝不能重新公开）
+        # 所以只报警不动作，让人来判断。
+        if was_scheduled:
+            return True, "Scheduled video lost its publishAt (stuck private) — needs human attention"
         return True, "Privacy changed to private (was public)"
 
     return False, ""
@@ -222,10 +228,13 @@ def check_and_fix(yt: YouTubeAPI, entries: list[dict]) -> list[dict]:
         has_issue, reason = has_copyright_issue(
             status_dict, was_scheduled=entry.get("was_scheduled", False)
         )
+        # 运维故障（排期丢失卡 private）：只报警，不走 DeepSeek 版权复核，
+        # 也不再调 make_private（已是 private，重复调用无意义）
+        ops_only = "stuck private" in reason
 
-        # DeepSeek 二次确认：只用于「规则说有问题」时排除误报，
+        # DeepSeek 二次确认：只用于「规则说有版权问题」时排除误报，
         # 不让它把规则判定的问题放过（模型保守性 > 灵敏性）。
-        if has_issue:
+        if has_issue and not ops_only:
             ds_result, ds_reason = analyze_with_deepseek(status_dict, video_id)
             if ds_result is False:
                 monitor_logger.info(
@@ -237,30 +246,32 @@ def check_and_fix(yt: YouTubeAPI, entries: list[dict]) -> list[dict]:
                 reason = f"{reason} | DeepSeek: {ds_reason}"
 
         if has_issue:
-            monitor_logger.error(f"EP{entry['ep']:02d} ({video_id}): {reason} — setting to PRIVATE")
-            try:
-                yt.make_private(video_id)
-            except Exception as exc:
-                monitor_logger.error(f"Failed to set private for {video_id}: {exc}")
-                continue
-
-            state = entry.get("state")
-            if state is not None:
-                state.yt_published = False
-                state.last_error = (
-                    f"Copyright monitor: {reason} "
-                    f"(set private at {datetime.now(timezone.utc).isoformat(timespec='seconds')})"
-                )
+            monitor_logger.error(f"EP{entry['ep']:02d} ({video_id}): {reason}")
+            if not ops_only:
+                monitor_logger.error(f"EP{entry['ep']:02d} ({video_id}): setting to PRIVATE")
                 try:
-                    manifest_upsert(state)
+                    yt.make_private(video_id)
                 except Exception as exc:
-                    monitor_logger.error(f"Failed to update manifest for EP{state.ep:02d}: {exc}")
+                    monitor_logger.error(f"Failed to set private for {video_id}: {exc}")
+                    continue
+
+                state = entry.get("state")
+                if state is not None:
+                    state.yt_published = False
+                    state.last_error = (
+                        f"Copyright monitor: {reason} "
+                        f"(set private at {datetime.now(timezone.utc).isoformat(timespec='seconds')})"
+                    )
+                    try:
+                        manifest_upsert(state)
+                    except Exception as exc:
+                        monitor_logger.error(f"Failed to update manifest for EP{state.ep:02d}: {exc}")
 
             issues.append({
                 "ep": entry["ep"],
                 "video_id": video_id,
                 "reason": reason,
-                "action": "set_private",
+                "action": "needs_attention" if ops_only else "set_private",
             })
         else:
             monitor_logger.info(f"EP{entry['ep']:02d} ({video_id}): OK")
