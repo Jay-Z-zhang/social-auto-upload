@@ -9,6 +9,8 @@
   <meta property="og:description" content="Upload once, publish everywhere. Schedule and distribute your video content across TikTok, YouTube, and more.">
   <meta property="og:type" content="website">
   <title>Social Auto-Publish - Multi-Platform Content Scheduling for Creators</title>
+  <link rel="icon" type="image/png" href="app-icon.png">
+  <link rel="apple-touch-icon" href="app-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -67,13 +69,9 @@
     .logo-icon {
       width: 36px;
       height: 36px;
-      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
       border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 1.1rem;
+      object-fit: cover;
+      display: block;
     }
     .nav-links { display: flex; gap: 32px; align-items: center; }
     .nav-links a {
@@ -455,7 +453,7 @@
   <nav>
     <div class="container">
       <a href="./" class="logo">
-        <span class="logo-icon">▶</span>
+        <img class="logo-icon" src="app-icon.png" alt="Social Auto-Publish logo">
         Social Auto-Publish
       </a>
       <div class="nav-links">
@@ -635,7 +633,7 @@
       <div class="footer-content">
         <div class="footer-brand">
           <a href="./" class="logo">
-            <span class="logo-icon">▶</span>
+            <img class="logo-icon" src="app-icon.png" alt="Social Auto-Publish logo">
             Social Auto-Publish
           </a>
           <p>A professional content scheduling platform for creators. Upload once, publish everywhere.</p>
