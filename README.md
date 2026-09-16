@@ -256,7 +256,7 @@ sau youtube login --account <account_name>
 
 **YT 自定义封面 403**：频道没手机验证过，去 [youtube.com/verify](https://youtube.com/verify) 走一遍。代码只 warn 不 fail，视频照发。
 
-**TikTok 只发到 SELF_ONLY**：应用还没过审。TikTok Developer Portal 提审 Content Sharing 才能公开发。
+**TikTok 只发到 SELF_ONLY**：账号或应用还拿不到 `PUBLIC_TO_EVERYONE` 时会自动降级。冒烟可用 `--tiktok-privacy self_only`。
 
 
 ## 三个本机页面

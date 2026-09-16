@@ -65,6 +65,14 @@ class ReviewRequest:
     shorts_playlist_id: str = ""
     # Resume support: skip steps whose outcome is already recorded in the manifest.
     resume_state: "object | None" = None
+    # YouTube visibility after compliance passes. "public" (default) makes the
+    # video public immediately (or at `schedule`), "unlisted" keeps it unlisted,
+    # "private" leaves the private draft on YouTube for manual review.
+    yt_visibility: str = "public"
+    # TikTok visibility. "auto" (default) uses PUBLIC_TO_EVERYONE when the
+    # creator_info list includes it, otherwise the most-open fallback.
+    # Explicit values: public / followers / friends / self_only.
+    tiktok_privacy: str = "auto"
 
 
 @dataclass
@@ -266,6 +274,11 @@ def run_review(request: ReviewRequest) -> ReviewOutcome:
             if request.schedule:
                 yt.schedule_publish(video_id, request.schedule)
                 outcome.scheduled_at = request.schedule
+            elif request.yt_visibility == "private":
+                # Video is already private from upload_private; nothing to do.
+                compliance_logger.info(f"Video {video_id} kept PRIVATE per --yt-visibility private.")
+            elif request.yt_visibility == "unlisted":
+                yt.set_visibility(video_id, "unlisted")
             else:
                 yt.make_public(video_id)
             outcome.youtube_published = True
@@ -362,20 +375,14 @@ def run_review(request: ReviewRequest) -> ReviewOutcome:
                 privacy_options = creator_info.get(
                     "privacy_level_options", ["SELF_ONLY"]
                 )
-
-                # Unaudited/sandbox apps 403 if we post public, even when
-                # PUBLIC_TO_EVERYONE appears in privacy_level_options.
-                if "SELF_ONLY" in privacy_options:
-                    privacy = "SELF_ONLY"
-                elif "PUBLIC_TO_EVERYONE" in privacy_options:
-                    privacy = "PUBLIC_TO_EVERYONE"
-                else:
-                    privacy = privacy_options[0]
-                if privacy != "PUBLIC_TO_EVERYONE":
-                    compliance_logger.warning(
-                        f"TikTok privacy set to {privacy}. "
-                        "Public posting requires a passed Content Posting audit."
-                    )
+                privacy = pick_tiktok_privacy(
+                    privacy_options, preferred=request.tiktok_privacy,
+                )
+                compliance_logger.info(
+                    f"TikTok privacy set to {privacy} "
+                    f"(preferred={request.tiktok_privacy or 'auto'}; "
+                    f"options={privacy_options})"
+                )
 
                 publish_id = tk.upload_video(
                     file_path=tk_source,
@@ -399,6 +406,61 @@ def run_review(request: ReviewRequest) -> ReviewOutcome:
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".webm"}
 YOUTUBE_DAILY_UPLOAD_BUDGET = 6
 TIKTOK_CAPTION_LIMIT = 2200
+TIKTOK_PRIVACY_ALIASES = {
+    "auto": None,
+    "public": "PUBLIC_TO_EVERYONE",
+    "followers": "FOLLOWER_OF_CREATOR",
+    "friends": "MUTUAL_FOLLOW_FRIENDS",
+    "self_only": "SELF_ONLY",
+}
+TIKTOK_PRIVACY_FALLBACK_ORDER = [
+    "PUBLIC_TO_EVERYONE",
+    "FOLLOWER_OF_CREATOR",
+    "MUTUAL_FOLLOW_FRIENDS",
+    "SELF_ONLY",
+]
+
+
+def pick_tiktok_privacy(options: list[str] | None, preferred: str = "auto") -> str:
+    """Choose a TikTok privacy_level from creator_info options.
+
+    auto: public if allowed, else the most-open remaining level.
+    An explicit preferred level that is not in *options* raises RuntimeError
+    so a smoke-test --tiktok-privacy self_only cannot silently go public,
+    and --tiktok-privacy public cannot silently fall back to SELF_ONLY.
+    """
+    available = [str(x) for x in (options or []) if str(x).strip()]
+    if not available:
+        raise RuntimeError("TikTok creator_info returned no privacy_level_options.")
+
+    raw = (preferred or "auto").strip()
+    key = raw.lower().replace("-", "_")
+    wanted = TIKTOK_PRIVACY_ALIASES.get(key)
+    if wanted is None and raw.upper() in TIKTOK_PRIVACY_FALLBACK_ORDER:
+        wanted = raw.upper()
+
+    if key in ("", "auto"):
+        for level in TIKTOK_PRIVACY_FALLBACK_ORDER:
+            if level in available:
+                if level != "PUBLIC_TO_EVERYONE":
+                    compliance_logger.warning(
+                        f"TikTok public posting is not available; using {level}. "
+                        f"Options: {available}"
+                    )
+                return level
+        raise RuntimeError(f"No usable TikTok privacy level in {available}.")
+
+    if wanted is None:
+        raise RuntimeError(
+            f"Unknown TikTok privacy '{preferred}'. "
+            f"Use auto, public, followers, friends, or self_only."
+        )
+    if wanted not in available:
+        raise RuntimeError(
+            f"TikTok privacy {wanted} is not available for this account. "
+            f"Options: {available}"
+        )
+    return wanted
 
 
 def _compose_tiktok_caption(title: str, tags: list[str]) -> str:
@@ -549,6 +611,7 @@ def run_batch_review(
     policy: PublishPolicy | None = None,
     auto_cover: bool = True,
     max_items: int = 0,
+    tiktok_privacy: str = "auto",
 ) -> list[ReviewOutcome]:
     """Review each video, then schedule YouTube public times so posts are staggered."""
     platforms = platforms or ["youtube"]
@@ -621,7 +684,11 @@ def run_batch_review(
     print("-" * 60)
     print(f"Pace: {per_day}/day. API uploads happen now; public time is delayed.")
     if "tiktok" in platforms:
-        print("TikTok: posted now as SELF_ONLY (unaudited), with a pause between items.")
+        print(
+            "TikTok: posted now (no schedule). "
+            f"Visibility: {tiktok_privacy or 'auto'} "
+            "(public if the account allows it)."
+        )
     print()
 
     if dry_run:
@@ -676,6 +743,7 @@ def run_batch_review(
             shorts_variant_file=shorts_variant,
             shorts_playlist_id=series.shorts_playlist_id,
             resume_state=prior_state,
+            tiktok_privacy=tiktok_privacy,
         )
         print(f"[{index + 1}/{len(planned)}] {video.name} -> {when.strftime('%Y-%m-%d %H:%M')}")
         outcome = run_review(request)

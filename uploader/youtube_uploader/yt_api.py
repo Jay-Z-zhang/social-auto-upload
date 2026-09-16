@@ -325,6 +325,16 @@ class YouTubeAPI:
             return {}
         return items[0]
 
+    def set_visibility(self, video_id: str, visibility: str) -> None:
+        """Set video privacyStatus to public/private/unlisted."""
+        if visibility not in ("public", "private", "unlisted"):
+            raise ValueError(f"invalid visibility: {visibility}")
+        self.service.videos().update(
+            part="status",
+            body={"id": video_id, "status": {"privacyStatus": visibility}},
+        ).execute()
+        youtube_logger.success(f"Video {video_id} visibility → {visibility.upper()}.")
+
     def schedule_publish(self, video_id: str, publish_at: datetime) -> None:
         """Schedule a private video to go public at *publish_at* (local naive or aware)."""
         if publish_at.tzinfo is None:

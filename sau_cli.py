@@ -1055,11 +1055,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     review_parser.add_argument("--youtube-account", required=True, help="YouTube account name for OAuth")
     review_parser.add_argument("--tiktok-account", default="", help="TikTok account name (required if --platforms includes tiktok)")
+    review_parser.add_argument(
+        "--tiktok-privacy",
+        default="auto",
+        choices=["auto", "public", "followers", "friends", "self_only"],
+        help="TikTok visibility. auto = public if the account allows it, else the most-open fallback. Use self_only for smoke tests.",
+    )
     review_parser.add_argument("--schedule", type=schedule_value, help=f"Schedule publish time in {schedule_help}")
     review_parser.add_argument("--category-id", default="22", help="YouTube video category ID (default: 22 = People & Blogs)")
     review_parser.add_argument("--made-for-kids", action="store_true", help="Declare video as made for kids")
     review_parser.add_argument("--synthetic-media", action="store_true", help="Declare video contains AI-generated/synthetic content")
     review_parser.add_argument("--shorts", action="store_true", help="Treat as YouTube Short: append #Shorts to title/description")
+    review_parser.add_argument("--yt-visibility", choices=["public", "private", "unlisted"], default="public", help="Final visibility for the YouTube upload after compliance. Default public. Use private for smoke tests.")
     review_parser.add_argument("--no-tiktok-prep", action="store_true", help="Skip TikTok anti-repost preprocessing (upload original file to TikTok too).")
     review_parser.add_argument("--tiktok-mirror", action="store_true", help="Horizontally flip the TikTok variant (strong dedupe signal — check text/logos first).")
     review_parser.add_argument("--force-fresh", action="store_true", help="Ignore manifest and re-upload even if this episode is already recorded.")
@@ -1075,6 +1082,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     batch_parser.add_argument("--youtube-account", required=True, help="YouTube account name for OAuth")
     batch_parser.add_argument("--tiktok-account", default="", help="TikTok account name (required if --platforms includes tiktok)")
+    batch_parser.add_argument(
+        "--tiktok-privacy",
+        default="auto",
+        choices=["auto", "public", "followers", "friends", "self_only"],
+        help="TikTok visibility. auto = public if the account allows it, else the most-open fallback. Use self_only for smoke tests.",
+    )
     batch_parser.add_argument("--per-day", type=int, default=2, help="How many videos go public per day (default: 2)")
     batch_parser.add_argument(
         "--times", default="12,19",
@@ -1419,6 +1432,8 @@ async def dispatch(args: argparse.Namespace) -> int:
             shorts_variant_file=shorts_variant,
             shorts_playlist_id=shorts_playlist_id,
             resume_state=resume_state,
+            yt_visibility=getattr(args, "yt_visibility", "public"),
+            tiktok_privacy=getattr(args, "tiktok_privacy", "auto"),
         )
 
         print(f"Starting compliance review for: {request.video_file.name}")
@@ -1499,6 +1514,7 @@ async def dispatch(args: argparse.Namespace) -> int:
             ),
             auto_cover=not args.no_auto_cover,
             max_items=getattr(args, "max_items", 0),
+            tiktok_privacy=args.tiktok_privacy,
         )
         if args.dry_run:
             return 0

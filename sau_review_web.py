@@ -267,6 +267,9 @@ def _start_job(data: dict) -> dict:
     ]
     if tiktok_account and "tiktok" in platforms:
         cmd.extend(["--tiktok-account", tiktok_account])
+    tiktok_privacy = str(data.get("tiktok_privacy") or "auto").strip() or "auto"
+    if tiktok_privacy != "auto":
+        cmd.extend(["--tiktok-privacy", tiktok_privacy])
     if shorts:
         cmd.append("--shorts")
     if dry_run:
@@ -633,6 +636,7 @@ def _retry_episode(data: dict) -> dict:
     tiktok_account = str(data.get("tiktok_account") or _cmd_flag("--tiktok-account")).strip()
     platforms = str(data.get("platforms") or _cmd_flag("--platforms", "youtube")).strip() or "youtube"
     shorts_flag = "--shorts" in prior_cmd or bool(data.get("shorts"))
+    yt_visibility = str(data.get("yt_visibility") or _cmd_flag("--yt-visibility", "public")).strip() or "public"
 
     if not youtube_account:
         raise ValueError("缺少 YouTube 账号（提供 youtube_account 或先跑一次批次）")
@@ -645,9 +649,13 @@ def _retry_episode(data: dict) -> dict:
         "--title", "auto",  # ignored when series.yaml is loaded
         "--youtube-account", youtube_account,
         "--platforms", platforms,
+        "--yt-visibility", yt_visibility,
     ]
     if tiktok_account and "tiktok" in platforms:
         cmd.extend(["--tiktok-account", tiktok_account])
+    tiktok_privacy = str(data.get("tiktok_privacy") or _cmd_flag("--tiktok-privacy", "auto")).strip() or "auto"
+    if tiktok_privacy != "auto":
+        cmd.extend(["--tiktok-privacy", tiktok_privacy])
     if shorts_flag:
         cmd.append("--shorts")
 
